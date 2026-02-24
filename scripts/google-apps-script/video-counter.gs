@@ -74,8 +74,9 @@ function getTasks_(listId, page) {
 
 function findField_(task, fieldName) {
   if (!task.custom_fields) return null;
+  const needle = fieldName.toLowerCase();
   return task.custom_fields.find(
-    cf => cf.name.toLowerCase() === fieldName.toLowerCase()
+    cf => cf.name.toLowerCase().includes(needle)
   );
 }
 
