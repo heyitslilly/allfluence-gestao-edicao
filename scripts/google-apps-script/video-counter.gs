@@ -286,6 +286,7 @@ function calculatePontos_(tasks) {
   const editorTaskIds = {}; // editorId -> [taskId, ...]
   const editorFds = {}; // editorId -> { tasks, bonus }
   const editorTaskWeights = {}; // editorId -> [peso, peso, ...]
+  const editorTaskNames = {}; // editorId -> [{ name, pontos }, ...]
   const unmatched = [];
 
   tasks.forEach(task => {
@@ -323,6 +324,8 @@ function calculatePontos_(tasks) {
       editorTaskIds[editor.id].push(task.id);
       if (!editorTaskWeights[editor.id]) editorTaskWeights[editor.id] = [];
       editorTaskWeights[editor.id].push(pontos);
+      if (!editorTaskNames[editor.id]) editorTaskNames[editor.id] = [];
+      editorTaskNames[editor.id].push({ name: task.name, pontos: pontos });
 
       // Track FDS tasks by weight
       if (fds) {
@@ -342,7 +345,7 @@ function calculatePontos_(tasks) {
     return e;
   });
 
-  return { editors, unmatched, editorTaskIds, editorFds, editorTaskWeights };
+  return { editors, unmatched, editorTaskIds, editorFds, editorTaskWeights, editorTaskNames };
 }
 
 function matchList_(name, list) {
@@ -450,7 +453,7 @@ function calculateTurbinho_(editors, editorTaskIds) {
 }
 
 function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
-  const { editors, unmatched, editorFds, editorTaskWeights } = counts;
+  const { editors, unmatched, editorFds, editorTaskWeights, editorTaskNames } = counts;
 
   // Rank: only time fixo editors compete for ranking/bonus
   const fixedEditors = editors.filter(e => isTimeFixo_(e.name));
@@ -487,7 +490,8 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
     if (e.team === 'freela') {
       const weights = editorTaskWeights[e.id] || [];
       const freelaTotal = weights.reduce((sum, peso) => sum + (CONFIG.BONUS.freelaPerTask[peso] || 0), 0);
-      e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100 };
+      const tasks = (editorTaskNames[e.id] || []).map(t => ({ name: t.name, pts: t.pontos }));
+      e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100, tasks: tasks };
     } else {
       e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, total: 0 };
     }

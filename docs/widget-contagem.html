@@ -177,14 +177,14 @@ function render(data) {
 
   // Freelas
   if (freelas.length > 0) {
-    html += '<div class="card">';
+    html += '<div class="card" style="position:relative">';
     html += '<h3 style="color:#f97316">Freelas</h3>';
     html += '<table><thead><tr>';
     html += '<th style="text-align:left">Nome</th><th>Criativos</th><th>Pontos</th><th>Valor</th>';
     html += '</tr></thead><tbody>';
 
-    freelas.forEach(e => {
-      html += '<tr>';
+    freelas.forEach((e, fi) => {
+      html += '<tr class="freela-row" data-freela-idx="' + fi + '" style="cursor:pointer">';
       html += '<td><span style="color:#f97316;font-size:9px;font-weight:700">FREELA</span> ' + (e.name.split(' ')[0]) + '</td>';
       html += '<td>' + e.totals.raw_count + '</td>';
       html += '<td style="font-weight:700;color:#10b981">' + e.totals.pontos + '</td>';
@@ -192,7 +192,16 @@ function render(data) {
       html += '</tr>';
     });
 
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
+    html += '<div class="chart-tooltip" id="freelaTooltip"></div>';
+    html += '</div>';
+
+    // Store freela task data for tooltip
+    window._freelaData = freelas.map(e => ({
+      name: e.name,
+      tasks: e.bonus?.tasks || [],
+      total: e.totals.pontos,
+    }));
   }
 
   // Time IA (tracking only, no bonus)
@@ -253,6 +262,7 @@ function render(data) {
 
   app.innerHTML = html;
   initChartTooltip();
+  initFreelaTooltip();
 }
 
 function initChartTooltip() {
@@ -295,6 +305,49 @@ function initChartTooltip() {
     });
 
     col.addEventListener('mouseleave', function() {
+      tooltip.style.display = 'none';
+    });
+  });
+}
+
+function initFreelaTooltip() {
+  const tooltip = document.getElementById('freelaTooltip');
+  if (!tooltip) return;
+  const card = tooltip.closest('.card');
+  if (!card) return;
+
+  const rows = card.querySelectorAll('.freela-row');
+  rows.forEach(row => {
+    row.addEventListener('mouseenter', function() {
+      const idx = parseInt(this.dataset.freelaIdx);
+      const fd = window._freelaData && window._freelaData[idx];
+      if (!fd) return;
+
+      let content = '<div class="tt-date">' + fd.name + '</div>';
+      content += '<table style="width:100%;font-size:11px;border-collapse:collapse;color:#1e293b">';
+      fd.tasks.forEach(t => {
+        var shortName = t.name.length > 40 ? t.name.substring(0, 40) + '...' : t.name;
+        content += '<tr><td style="padding:2px 8px 2px 0;border-bottom:1px solid #f1f5f9">' + shortName + '</td>';
+        content += '<td style="padding:2px 0;font-weight:700;text-align:right;border-bottom:1px solid #f1f5f9;white-space:nowrap">' + t.pts + ' pt' + (t.pts > 1 ? 's' : '') + '</td></tr>';
+      });
+      content += '</table>';
+      content += '<div class="tt-total">' + fd.tasks.length + ' criativos &middot; ' + fd.total + ' pts</div>';
+
+      tooltip.innerHTML = content;
+      tooltip.style.display = 'block';
+    });
+
+    row.addEventListener('mousemove', function(ev) {
+      const rect = card.getBoundingClientRect();
+      let left = ev.clientX - rect.left + 12;
+      let top = ev.clientY - rect.top - 10;
+      if (left + tooltip.offsetWidth > rect.width - 10) left = left - tooltip.offsetWidth - 24;
+      if (top + tooltip.offsetHeight > rect.height) top = rect.height - tooltip.offsetHeight - 10;
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    });
+
+    row.addEventListener('mouseleave', function() {
       tooltip.style.display = 'none';
     });
   });
