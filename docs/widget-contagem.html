@@ -28,13 +28,13 @@
   .chart-header h3 { font-size: 15px; font-weight: 800; }
   .chart-avg-label { font-size: 12px; color: #94a3b8; }
   .chart-avg-label b { color: #e2e8f0; }
-  .chart-area { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 200px; padding-left: 30px; }
-  .chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; cursor: pointer; }
-  .chart-bar-col:hover .chart-bar-stack { opacity: 0.85; }
-  .chart-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; transition: opacity .15s; }
-  .chart-bar-seg { width: 100%; min-height: 0; }
-  .chart-bar-total { font-size: 10px; font-weight: 700; color: #e2e8f0; margin-bottom: 2px; text-align: center; }
-  .chart-bar-date { font-size: 9px; color: #64748b; margin-top: 4px; white-space: nowrap; }
+  .chart-area { position: relative; display: flex; align-items: stretch; gap: 2px; height: 220px; padding-left: 30px; padding-bottom: 32px; }
+  .chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; cursor: pointer; }
+  .chart-bar-col:hover .chart-bar-stack { opacity: 0.8; filter: brightness(1.15); }
+  .chart-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 2px 2px 0 0; overflow: hidden; transition: all .15s; flex-shrink: 0; }
+  .chart-bar-seg { width: 100%; }
+  .chart-bar-total { font-size: 9px; font-weight: 700; color: #e2e8f0; margin-bottom: 1px; text-align: center; flex-shrink: 0; }
+  .chart-bar-date { font-size: 8px; color: #64748b; white-space: nowrap; position: absolute; bottom: -22px; }
   .chart-avg-line { position: absolute; left: 30px; right: 0; border-top: 2.5px dashed #ef4444; pointer-events: none; z-index: 2; }
   .chart-y-label { position: absolute; left: 0; font-size: 9px; color: #64748b; transform: translateY(-50%); }
   .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding-left: 30px; }
@@ -117,7 +117,7 @@ function render(data) {
   html += '</div>';
 
   // Daily chart
-  html += renderDailyChart(data.editors);
+  html += renderDailyChart(data.editors, data.metadata?.month);
 
   // Podium (top 3)
   if (fixed.length >= 2) {
@@ -286,34 +286,42 @@ const EDITOR_COLORS = [
   '#e11d48', '#0ea5e9', '#22c55e', '#d946ef', '#64748b', '#fb923c',
 ];
 
-function renderDailyChart(editors) {
+function renderDailyChart(editors, month) {
   if (!editors || editors.length === 0) return '';
 
-  // Collect daily data per editor
   const editorList = editors.filter(e => e.daily && Object.keys(e.daily).length > 0);
   if (editorList.length === 0) return '';
 
-  // Get all unique dates sorted
-  const dateSet = new Set();
-  editorList.forEach(e => Object.keys(e.daily).forEach(d => dateSet.add(d)));
-  const dates = Array.from(dateSet).sort();
-  if (dates.length === 0) return '';
+  const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const BAR_AREA_H = 180; // pixels for bars
+
+  // Generate ALL days of the month
+  const m = month || new Date().toISOString().slice(0, 7); // "2026-02"
+  const [y, mo] = m.split('-').map(Number);
+  const daysInMonth = new Date(y, mo, 0).getDate();
+  const dates = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    dates.push(y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0'));
+  }
 
   // Assign colors
   const colorMap = {};
   editorList.forEach((e, i) => { colorMap[e.name] = EDITOR_COLORS[i % EDITOR_COLORS.length]; });
 
-  // Calculate totals per day and find max
-  const dayTotals = dates.map(d => {
+  // Calculate totals per day
+  const dayTotals = dates.map(date => {
     let total = 0;
-    editorList.forEach(e => { total += (e.daily[d] || 0); });
-    return { date: d, total: Math.round(total * 10) / 10 };
+    editorList.forEach(e => { total += (e.daily[date] || 0); });
+    return { date, total: Math.round(total * 10) / 10 };
   });
   const maxTotal = Math.max(...dayTotals.map(d => d.total), 1);
-  const avg = Math.round(dayTotals.reduce((a, d) => a + d.total, 0) / dayTotals.length * 100) / 100;
+  const daysWithData = dayTotals.filter(d => d.total > 0);
+  const avg = daysWithData.length > 0
+    ? Math.round(daysWithData.reduce((a, d) => a + d.total, 0) / daysWithData.length * 100) / 100
+    : 0;
 
   // Y-axis scale
-  const yMax = Math.ceil(maxTotal / 5) * 5;
+  const yMax = Math.ceil(maxTotal / 5) * 5 || 5;
   const ySteps = [0, Math.round(yMax / 4), Math.round(yMax / 2), Math.round(yMax * 3 / 4), yMax];
 
   let h = '<div class="card"><div class="chart-wrap">';
@@ -329,16 +337,15 @@ function renderDailyChart(editors) {
 
   // Y-axis labels
   ySteps.forEach(v => {
-    const pct = (v / yMax) * 100;
-    h += '<div class="chart-y-label" style="bottom:' + pct + '%">' + v + '</div>';
+    const bottom = (v / yMax) * BAR_AREA_H;
+    h += '<div class="chart-y-label" style="bottom:' + (bottom + 32) + 'px">' + v + '</div>';
   });
 
   // Average line
-  const avgPct = Math.min((avg / yMax) * 100, 100);
-  h += '<div class="chart-avg-line" style="bottom:' + avgPct + '%"></div>';
+  const avgPx = (avg / yMax) * BAR_AREA_H;
+  h += '<div class="chart-avg-line" style="bottom:' + (avgPx + 32) + 'px"></div>';
 
-  // Build tooltip data per date (sorted desc by pontos)
-  const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  // Tooltip data
   const tooltipData = dates.map(date => {
     const entries = editorList
       .map(e => ({ name: e.name, val: e.daily[date] || 0, color: colorMap[e.name] }))
@@ -349,32 +356,36 @@ function renderDailyChart(editors) {
     return { label, entries };
   });
 
-  // Bars
+  // Bars — all days of month
   dates.forEach((date, di) => {
     const dt = dayTotals[di];
+    const barH = dt.total > 0 ? Math.max((dt.total / yMax) * BAR_AREA_H, 2) : 0;
     h += '<div class="chart-bar-col" data-tt-idx="' + di + '">';
+
+    // Total label above bar
     if (dt.total > 0) h += '<div class="chart-bar-total">' + dt.total + '</div>';
 
-    h += '<div class="chart-bar-stack" style="height:' + ((dt.total / yMax) * 100) + '%">';
-    editorList.forEach(e => {
-      const val = e.daily[date] || 0;
-      if (val <= 0) return;
-      const segPct = (val / dt.total) * 100;
-      h += '<div class="chart-bar-seg" style="height:' + segPct + '%;background:' + colorMap[e.name] + '"></div>';
-    });
+    // Stacked bar with pixel height
+    h += '<div class="chart-bar-stack" style="height:' + barH + 'px">';
+    if (dt.total > 0) {
+      editorList.forEach(e => {
+        const val = e.daily[date] || 0;
+        if (val <= 0) return;
+        const segH = Math.max((val / dt.total) * barH, 1);
+        h += '<div class="chart-bar-seg" style="height:' + segH + 'px;background:' + colorMap[e.name] + '"></div>';
+      });
+    }
     h += '</div>';
 
+    // Date label
     const d = new Date(date + 'T12:00:00');
     const label = String(d.getDate()).padStart(2, '0') + ' ' + MONTHS_SHORT[d.getMonth()];
-    if (dates.length <= 20 || di % 2 === 0) {
-      h += '<div class="chart-bar-date">' + label + '</div>';
-    }
+    h += '<div class="chart-bar-date">' + label + '</div>';
     h += '</div>';
   });
 
   // Tooltip element
   h += '<div class="chart-tooltip" id="chartTooltip"></div>';
-
   h += '</div>'; // chart-area
 
   // Legend
@@ -389,10 +400,8 @@ function renderDailyChart(editors) {
 
   h += '</div></div>'; // chart-wrap, card
 
-  // Store tooltip data globally for event handler
   window._chartTooltipData = tooltipData;
   window._chartDayTotals = dayTotals;
-
   return h;
 }
 
