@@ -33,7 +33,7 @@ const CONFIG = {
     turbinho: { value: 10 }, // R$10 por criativo sem ajuste
     fds: { perTask: { 1: 35, 2: 50 }, tags: ['fds edição', 'feriado edição'] },
     ajusteStatuses: ['para ajustar', 'para ajustar cliente'],
-    freelaPerPonto: 35,
+    freelaPerTask: { 1: 35, 2: 50 },
   },
   // Fallback weight map when "Pontos" field is empty
   WEIGHT_MAP: {
@@ -284,7 +284,8 @@ function fetchAllTasks_(listId, dateRange) {
 function calculatePontos_(tasks) {
   const editorMap = {};
   const editorTaskIds = {}; // editorId -> [taskId, ...]
-  const editorFds = {}; // editorId -> { pontos, count }
+  const editorFds = {}; // editorId -> { tasks, bonus }
+  const editorTaskWeights = {}; // editorId -> [peso, peso, ...]
   const unmatched = [];
 
   tasks.forEach(task => {
@@ -317,9 +318,11 @@ function calculatePontos_(tasks) {
         ed.daily[dateStr] = (ed.daily[dateStr] || 0) + pts;
       }
 
-      // Track task IDs for turbinho
+      // Track task IDs for turbinho + task weights for freela bonus
       if (!editorTaskIds[editor.id]) editorTaskIds[editor.id] = [];
       editorTaskIds[editor.id].push(task.id);
+      if (!editorTaskWeights[editor.id]) editorTaskWeights[editor.id] = [];
+      editorTaskWeights[editor.id].push(pontos);
 
       // Track FDS tasks by weight
       if (fds) {
@@ -339,7 +342,7 @@ function calculatePontos_(tasks) {
     return e;
   });
 
-  return { editors, unmatched, editorTaskIds, editorFds };
+  return { editors, unmatched, editorTaskIds, editorFds, editorTaskWeights };
 }
 
 function matchList_(name, list) {
@@ -447,7 +450,7 @@ function calculateTurbinho_(editors, editorTaskIds) {
 }
 
 function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
-  const { editors, unmatched, editorFds } = counts;
+  const { editors, unmatched, editorFds, editorTaskWeights } = counts;
 
   // Rank: only time fixo editors compete for ranking/bonus
   const fixedEditors = editors.filter(e => isTimeFixo_(e.name));
@@ -479,12 +482,14 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
     };
   });
 
-  // Assign bonus — other editors (freelas get per-point, rest get nothing)
+  // Assign bonus — other editors (freelas get per-task by weight, rest get nothing)
   otherEditors.forEach(e => {
     if (e.team === 'freela') {
-      e.bonus = { freelaTotal: Math.round(e.pontos * CONFIG.BONUS.freelaPerPonto * 100) / 100 };
+      const weights = editorTaskWeights[e.id] || [];
+      const freelaTotal = weights.reduce((sum, peso) => sum + (CONFIG.BONUS.freelaPerTask[peso] || 0), 0);
+      e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100 };
     } else {
-      e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, fds_pontos: 0, total: 0 };
+      e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, total: 0 };
     }
   });
 

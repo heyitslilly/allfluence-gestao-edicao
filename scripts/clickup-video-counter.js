@@ -59,7 +59,7 @@ const BONUS_CONFIG = {
   turbinho: { value: 10 }, // R$10 por criativo sem ajuste
   fds: { perTask: { 1: 35, 2: 50 }, tags: ['fds edição', 'feriado edição'] },
   ajusteStatuses: ['para ajustar', 'para ajustar cliente'],
-  freelaPerPonto: 35,
+  freelaPerTask: { 1: 35, 2: 50 },
 };
 
 // Time fixo — apenas esses editores recebem TURBO e Turbinho
