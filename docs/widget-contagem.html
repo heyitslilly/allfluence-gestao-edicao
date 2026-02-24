@@ -84,8 +84,9 @@ function render(data) {
     return;
   }
 
-  const fixed = data.editors.filter(e => e.team !== 'freela').sort((a, b) => (a.rank || 99) - (b.rank || 99));
+  const fixed = data.editors.filter(e => e.team === 'fixed').sort((a, b) => (a.rank || 99) - (b.rank || 99));
   const freelas = data.editors.filter(e => e.team === 'freela');
+  const iaEditors = data.editors.filter(e => e.team === 'ia');
   const totalPontos = data.summary?.total_pontos || fixed.reduce((a, e) => a + e.totals.pontos, 0);
   const totalEditors = fixed.length;
   const avgPontos = totalEditors > 0 ? Math.round(totalPontos / totalEditors * 10) / 10 : 0;
@@ -184,10 +185,29 @@ function render(data) {
 
     freelas.forEach(e => {
       html += '<tr>';
-      html += '<td style="color:#f97316">' + (e.name.split(' ')[0]) + '</td>';
+      html += '<td><span style="color:#f97316;font-size:9px;font-weight:700">FREELA</span> ' + (e.name.split(' ')[0]) + '</td>';
       html += '<td>' + e.totals.raw_count + '</td>';
       html += '<td style="font-weight:700;color:#10b981">' + e.totals.pontos + '</td>';
       html += '<td style="font-weight:700;color:#f97316">R$ ' + (e.bonus?.freelaTotal || 0).toFixed(0) + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+  }
+
+  // Time IA (tracking only, no bonus)
+  if (iaEditors.length > 0) {
+    html += '<div class="card">';
+    html += '<h3 style="color:#6366f1">Time IA</h3>';
+    html += '<table><thead><tr>';
+    html += '<th style="text-align:left">Nome</th><th>Criativos</th><th>Pontos</th>';
+    html += '</tr></thead><tbody>';
+
+    iaEditors.forEach(e => {
+      html += '<tr>';
+      html += '<td style="color:#6366f1">' + e.name + '</td>';
+      html += '<td>' + e.totals.raw_count + '</td>';
+      html += '<td style="font-weight:700;color:#10b981">' + e.totals.pontos + '</td>';
       html += '</tr>';
     });
 
