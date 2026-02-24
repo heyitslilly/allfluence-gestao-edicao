@@ -23,6 +23,22 @@
   .turbo-badge { display: inline-block; background: #f9731622; color: #f97316; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
   .turbinho-badge { display: inline-block; background: #10b98122; color: #10b981; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
   .fds-badge { display: inline-block; background: #fbbf2422; color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .chart-wrap { position: relative; padding: 24px 0 0; }
+  .chart-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .chart-header h3 { font-size: 15px; font-weight: 800; }
+  .chart-avg-label { font-size: 12px; color: #94a3b8; }
+  .chart-avg-label b { color: #e2e8f0; }
+  .chart-area { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 200px; padding-left: 30px; }
+  .chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .chart-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; }
+  .chart-bar-seg { width: 100%; min-height: 0; }
+  .chart-bar-total { font-size: 10px; font-weight: 700; color: #e2e8f0; margin-bottom: 2px; text-align: center; }
+  .chart-bar-date { font-size: 9px; color: #64748b; margin-top: 4px; white-space: nowrap; }
+  .chart-avg-line { position: absolute; left: 30px; right: 0; border-top: 2.5px dashed #ef4444; pointer-events: none; z-index: 2; }
+  .chart-y-label { position: absolute; left: 0; font-size: 9px; color: #64748b; transform: translateY(-50%); }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding-left: 30px; }
+  .chart-legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #94a3b8; }
+  .chart-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
   .loading { text-align: center; padding: 40px; color: #64748b; }
   .error { text-align: center; padding: 20px; color: #ef4444; background: #7f1d1d22; border-radius: 8px; }
   .meta { font-size: 11px; color: #64748b; text-align: center; margin-top: 8px; }
@@ -45,7 +61,7 @@
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 // Replace with your Google Apps Script Web App URL after deploying
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwsf8fltl5IqdSOuTwZSIyeVZt16CHCLbmVe9MoGZHKzwFcTt6x723jCWiJxzxgzOrG/exec';
+const GAS_URL = '';
 const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
 const META_DIARIA = 6;
 const TURBO_THRESHOLD = 8;
@@ -91,6 +107,9 @@ function render(data) {
     html += statCard('R$ ' + freelaCost.toFixed(0), 'Custo Freelas', '#f97316');
   }
   html += '</div>';
+
+  // Daily chart
+  html += renderDailyChart(data.editors);
 
   // Podium (top 3)
   if (fixed.length >= 2) {
@@ -205,6 +224,103 @@ function render(data) {
   html += '<div class="meta">Atualizado: ' + (cachedAt ? new Date(cachedAt).toLocaleString('pt-BR') : '—') + '</div>';
 
   app.innerHTML = html;
+}
+
+const EDITOR_COLORS = [
+  '#8b5cf6', '#3b82f6', '#10b981', '#84cc16', '#f97316', '#ef4444',
+  '#ec4899', '#06b6d4', '#f59e0b', '#6366f1', '#14b8a6', '#a855f7',
+  '#e11d48', '#0ea5e9', '#22c55e', '#d946ef', '#64748b', '#fb923c',
+];
+
+function renderDailyChart(editors) {
+  if (!editors || editors.length === 0) return '';
+
+  // Collect daily data per editor
+  const editorList = editors.filter(e => e.daily && Object.keys(e.daily).length > 0);
+  if (editorList.length === 0) return '';
+
+  // Get all unique dates sorted
+  const dateSet = new Set();
+  editorList.forEach(e => Object.keys(e.daily).forEach(d => dateSet.add(d)));
+  const dates = Array.from(dateSet).sort();
+  if (dates.length === 0) return '';
+
+  // Assign colors
+  const colorMap = {};
+  editorList.forEach((e, i) => { colorMap[e.name] = EDITOR_COLORS[i % EDITOR_COLORS.length]; });
+
+  // Calculate totals per day and find max
+  const dayTotals = dates.map(d => {
+    let total = 0;
+    editorList.forEach(e => { total += (e.daily[d] || 0); });
+    return { date: d, total: Math.round(total * 10) / 10 };
+  });
+  const maxTotal = Math.max(...dayTotals.map(d => d.total), 1);
+  const avg = Math.round(dayTotals.reduce((a, d) => a + d.total, 0) / dayTotals.length * 100) / 100;
+
+  // Y-axis scale
+  const yMax = Math.ceil(maxTotal / 5) * 5;
+  const ySteps = [0, Math.round(yMax / 4), Math.round(yMax / 2), Math.round(yMax * 3 / 4), yMax];
+
+  let h = '<div class="card"><div class="chart-wrap">';
+
+  // Header
+  h += '<div class="chart-header">';
+  h += '<h3>EDICOES ESTE MES (por dia)</h3>';
+  h += '<div class="chart-avg-label">Media: <b>' + avg.toFixed(2) + '</b></div>';
+  h += '</div>';
+
+  // Chart area
+  h += '<div class="chart-area">';
+
+  // Y-axis labels
+  ySteps.forEach(v => {
+    const pct = (v / yMax) * 100;
+    h += '<div class="chart-y-label" style="bottom:' + pct + '%">' + v + '</div>';
+  });
+
+  // Average line
+  const avgPct = Math.min((avg / yMax) * 100, 100);
+  h += '<div class="chart-avg-line" style="bottom:' + avgPct + '%"></div>';
+
+  // Bars
+  dates.forEach((date, di) => {
+    const dt = dayTotals[di];
+    h += '<div class="chart-bar-col">';
+    if (dt.total > 0) h += '<div class="chart-bar-total">' + dt.total + '</div>';
+
+    h += '<div class="chart-bar-stack" style="height:' + ((dt.total / yMax) * 100) + '%">';
+    editorList.forEach(e => {
+      const val = e.daily[date] || 0;
+      if (val <= 0) return;
+      const segPct = (val / dt.total) * 100;
+      h += '<div class="chart-bar-seg" style="height:' + segPct + '%;background:' + colorMap[e.name] + '"></div>';
+    });
+    h += '</div>';
+
+    // Date label — show every other date or all if <= 15 days
+    const d = new Date(date + 'T12:00:00');
+    const label = String(d.getDate()).padStart(2, '0') + ' ' + ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][d.getMonth()];
+    if (dates.length <= 20 || di % 2 === 0) {
+      h += '<div class="chart-bar-date">' + label + '</div>';
+    }
+    h += '</div>';
+  });
+
+  h += '</div>'; // chart-area
+
+  // Legend
+  h += '<div class="chart-legend">';
+  editorList.forEach(e => {
+    h += '<div class="chart-legend-item">';
+    h += '<div class="chart-legend-dot" style="background:' + colorMap[e.name] + '"></div>';
+    h += e.name.split(' ')[0];
+    h += '</div>';
+  });
+  h += '</div>';
+
+  h += '</div></div>'; // chart-wrap, card
+  return h;
 }
 
 function statCard(value, label, color) {
