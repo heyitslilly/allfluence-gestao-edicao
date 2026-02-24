@@ -29,7 +29,7 @@ const CONFIG = {
       { rank: 2, value: 250 },
     ],
     metaDiaria: 6, // meta mínima diária: 6 pontos
-    turbo: { value: 100, threshold: 8 }, // TURBO: 8+ pontos/dia
+    turbo: { value: 100, threshold: 8, tag: 'turbo' }, // TURBO: tag "turbo" (+R$100/vid)
     turbinho: { value: 10 }, // R$10 por criativo sem ajuste
     fds: { perTask: { 1: 35, 2: 50 }, tags: ['fds edição', 'feriado edição'] },
     ajusteStatuses: ['para ajustar', 'para ajustar cliente'],
@@ -221,6 +221,14 @@ function isFdsTask_(task) {
   });
 }
 
+function isTurboTask_(task) {
+  if (!task.tags || !Array.isArray(task.tags)) return false;
+  var tag = (CONFIG.BONUS.turbo.tag || 'turbo').toLowerCase();
+  return task.tags.some(function(t) {
+    return (t.name || '').toLowerCase() === tag;
+  });
+}
+
 function getTimeInStatus_(taskId) {
   try {
     return clickupGet_('/task/' + taskId + '/time_in_status');
@@ -287,6 +295,7 @@ function calculatePontos_(tasks) {
   const editorFds = {}; // editorId -> { tasks, bonus }
   const editorTaskWeights = {}; // editorId -> [peso, peso, ...]
   const editorTaskNames = {}; // editorId -> [{ name, pontos }, ...]
+  const editorTurboTasks = {}; // editorId -> [{ name, task_id, date, pontos }]
   const unmatched = [];
 
   tasks.forEach(task => {
@@ -332,7 +341,14 @@ function calculatePontos_(tasks) {
         primeira_edicao: dateStr,
         status: task.status ? task.status.status : '',
         status_color: task.status ? task.status.color : '',
+        is_turbo: isTurboTask_(task),
       });
+
+      // Track turbo-tagged tasks
+      if (isTurboTask_(task)) {
+        if (!editorTurboTasks[editor.id]) editorTurboTasks[editor.id] = [];
+        editorTurboTasks[editor.id].push({ name: task.name, task_id: task.id, date: dateStr, pontos: pontos });
+      }
 
       // Track FDS tasks by weight
       if (fds) {
@@ -352,7 +368,7 @@ function calculatePontos_(tasks) {
     return e;
   });
 
-  return { editors, unmatched, editorTaskIds, editorFds, editorTaskWeights, editorTaskNames };
+  return { editors, unmatched, editorTaskIds, editorFds, editorTaskWeights, editorTaskNames, editorTurboTasks };
 }
 
 function matchList_(name, list) {
@@ -369,22 +385,28 @@ function classifyTeam_(name) {
   return 'freela'; // default: unknown goes to freela
 }
 
-function calculateTurbo_(editors, threshold) {
+function calculateTurbo_(editors, editorTurboTasks) {
   const turboDays = {};
   editors.forEach(editor => {
     if (!isTimeFixo_(editor.name)) return;
-    const days = [];
-    Object.entries(editor.daily).forEach(([date, pontos]) => {
-      if (pontos > threshold) days.push({ date, pontos });
+    const tasks = editorTurboTasks[editor.id] || [];
+    if (tasks.length === 0) return;
+
+    // Group by date for display
+    const byDate = {};
+    tasks.forEach(t => {
+      var d = t.date || 'sem-data';
+      if (!byDate[d]) byDate[d] = { date: d, pontos: editor.daily[d] || 0, turbo_count: 0 };
+      byDate[d].turbo_count++;
     });
-    if (days.length > 0) {
-      turboDays[editor.id] = {
-        name: editor.name,
-        count: days.length,
-        total_bonus: days.length * CONFIG.BONUS.turbo.value,
-        days: days.sort((a, b) => a.date.localeCompare(b.date)),
-      };
-    }
+
+    turboDays[editor.id] = {
+      name: editor.name,
+      count: tasks.length,
+      total_bonus: tasks.length * CONFIG.BONUS.turbo.value,
+      tasks: tasks,
+      days: Object.values(byDate).sort((a, b) => a.date.localeCompare(b.date)),
+    };
   });
   return turboDays;
 }
@@ -484,6 +506,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
       productivity: prodBonus,
       turbo: turboBonus,
       turbo_days: turboData ? turboData.count : 0,
+      turbo_tasks: turboData ? turboData.tasks : [],
       turbinho: turbinhoBonus,
       turbinho_count: turbinho ? turbinho.sem_ajuste : 0,
       fds: fdsBonus,
@@ -493,6 +516,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
     e.tasks = (editorTaskNames[e.id] || []).map(t => ({
       name: t.name, pts: t.pontos, task_id: t.task_id,
       primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
+      is_turbo: t.is_turbo || false,
     }));
   });
 
@@ -504,6 +528,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
       const tasks = (editorTaskNames[e.id] || []).map(t => ({
         name: t.name, pts: t.pontos, task_id: t.task_id,
         primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
+        is_turbo: t.is_turbo || false,
       }));
       e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100, tasks: tasks };
     } else {
@@ -588,7 +613,7 @@ function videoCounterMain(customMonth) {
     }
   });
 
-  const turboDays = calculateTurbo_(counts.editors, CONFIG.BONUS.turbo.threshold);
+  const turboDays = calculateTurbo_(counts.editors, counts.editorTurboTasks);
   const turbinhoData = calculateTurbinho_(counts.editors, counts.editorTaskIds);
   const report = generateReport_(counts, turboDays, turbinhoData, month, allTasks.length);
 

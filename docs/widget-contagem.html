@@ -114,7 +114,7 @@ function render(data) {
   // Header
   html += '<div style="margin-bottom: 12px">';
   html += '<h2>Contagem de Pontos</h2>';
-  html += '<div class="subtitle">Mes: ' + (data.metadata?.month || '—') + ' &middot; Meta: ' + metaDiaria + ' pts/dia &middot; TURBO: ' + turboThreshold + '+ pts</div>';
+  html += '<div class="subtitle">Mes: ' + (data.metadata?.month || '—') + ' &middot; Meta: ' + metaDiaria + ' pts/dia &middot; TURBO: tag turbo (+R$100/vid)</div>';
   html += '</div>';
 
   // Stats
@@ -176,8 +176,8 @@ function render(data) {
 
   fixed.forEach((e, fi) => {
     const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : e.rank + 'o ';
-    const turboDays = e.bonus?.turbo_days || 0;
-    const turboHtml = turboDays > 0 ? '<span class="turbo-badge">&#x26A1;' + turboDays + 'd</span>' : '<span style="color:#334155">—</span>';
+    const turboCount = e.bonus?.turbo_days || 0;
+    const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1;' + turboCount + '</span>' : '<span style="color:#334155">—</span>';
     const turbinhoCount = e.bonus?.turbinho_count || 0;
     const turbinhoHtml = turbinhoCount > 0 ? '<span class="turbinho-badge">&#x2728;' + turbinhoCount + '</span>' : '<span style="color:#334155">—</span>';
     const fdsVal = e.bonus?.fds || 0;
@@ -248,13 +248,13 @@ function render(data) {
   // TURBO details
   if (data.turbo_days && Object.keys(data.turbo_days).length > 0) {
     html += '<div class="card" style="border:1px solid #f9731644">';
-    html += '<h3 style="color:#f97316">&#x26A1; Dias TURBO (>' + turboThreshold + ' pts)</h3>';
+    html += '<h3 style="color:#f97316">&#x26A1; Videos TURBO (tag turbo)</h3>';
 
     Object.values(data.turbo_days).forEach(td => {
       html += '<div style="margin-bottom:8px">';
-      html += '<div style="font-weight:600;font-size:13px">' + td.name.split(' ')[0] + ' <span style="color:#f97316;font-size:11px">' + td.count + ' dia(s) = R$ ' + td.total_bonus + '</span></div>';
-      td.days.forEach(day => {
-        html += '<div style="font-size:11px;color:#94a3b8;margin-left:12px">' + day.date + ': <span style="color:#10b981;font-weight:600">' + day.pontos + ' pts</span></div>';
+      html += '<div style="font-weight:600;font-size:13px">' + td.name.split(' ')[0] + ' <span style="color:#f97316;font-size:11px">' + td.count + ' video(s) = R$ ' + td.total_bonus + '</span></div>';
+      (td.days || []).forEach(day => {
+        html += '<div style="font-size:11px;color:#94a3b8;margin-left:12px">' + day.date + ': <span style="color:#f97316;font-weight:600">' + day.turbo_count + ' turbo</span> &middot; <span style="color:#10b981;font-weight:600">' + day.pontos + ' pts total dia</span></div>';
       });
       html += '</div>';
     });
@@ -346,7 +346,8 @@ function showCriativos(idx) {
     }
 
     h += '<tr>';
-    h += '<td>' + nameHtml + '</td>';
+    const turboTag = t.is_turbo ? ' <span class="turbo-badge">&#x26A1;TURBO</span>' : '';
+    h += '<td>' + nameHtml + turboTag + '</td>';
     h += '<td style="text-align:center;font-weight:700;color:#10b981">' + t.pts + '</td>';
     h += '<td style="text-align:center;color:#94a3b8;font-size:11px">' + peHtml + '</td>';
     h += '<td style="text-align:center">' + statusHtml + '</td>';
