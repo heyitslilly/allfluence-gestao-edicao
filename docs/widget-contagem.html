@@ -47,6 +47,18 @@
   .chart-tooltip .tt-name { flex: 1; }
   .chart-tooltip .tt-val { font-weight: 700; }
   .chart-tooltip .tt-total { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; color: #ef4444; font-weight: 700; font-style: italic; }
+  .btn-criativos { background:#334155; color:#94a3b8; border:1px solid #475569; border-radius:5px; padding:2px 8px; font-size:10px; cursor:pointer; font-weight:600; transition:all .15s; }
+  .btn-criativos:hover { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+  #criativos-detail { display:none; }
+  #criativos-detail.active { display:block; }
+  .back-btn { background:none; border:none; color:#3b82f6; cursor:pointer; font-size:13px; font-weight:600; padding:4px 0; margin-bottom:8px; }
+  .back-btn:hover { text-decoration:underline; }
+  .detail-table { width:100%; font-size:11px; border-collapse:collapse; }
+  .detail-table th { text-align:left; padding:8px 6px; color:#94a3b8; border-bottom:1px solid #334155; font-size:10px; }
+  .detail-table td { padding:7px 6px; border-bottom:1px solid #1e293b; }
+  .detail-table a { color:#60a5fa; text-decoration:none; }
+  .detail-table a:hover { text-decoration:underline; }
+  .status-pill { display:inline-block; padding:2px 8px; border-radius:4px; font-size:9px; font-weight:700; text-transform:uppercase; }
   .loading { text-align: center; padding: 40px; color: #64748b; }
   .error { text-align: center; padding: 20px; color: #ef4444; background: #7f1d1d22; border-radius: 8px; }
   .meta { font-size: 11px; color: #64748b; text-align: center; margin-top: 8px; }
@@ -62,9 +74,12 @@
   <input type="month" id="monthPicker" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit" />
   <button onclick="loadMonth()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">Carregar</button>
 </div>
+<div id="main-content">
 <div id="app">
   <div class="loading" id="loading">Carregando dados...</div>
 </div>
+</div>
+<div id="criativos-detail"></div>
 
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -150,10 +165,16 @@ function render(data) {
   html += '<div class="card">';
   html += '<h3>Pontos — Time Fixo</h3>';
   html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>Turbinho</th><th>FDS</th><th>Bonus</th>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>Turbinho</th><th>FDS</th><th>Bonus</th><th></th>';
   html += '</tr></thead><tbody>';
 
-  fixed.forEach(e => {
+  // Store fixed editor data for detail page
+  window._fixedEditorData = fixed.map(e => ({
+    name: e.name, pontos: e.totals.pontos, raw_count: e.totals.raw_count,
+    tasks: e.tasks || [],
+  }));
+
+  fixed.forEach((e, fi) => {
     const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : e.rank + 'o ';
     const turboDays = e.bonus?.turbo_days || 0;
     const turboHtml = turboDays > 0 ? '<span class="turbo-badge">&#x26A1;' + turboDays + 'd</span>' : '<span style="color:#334155">—</span>';
@@ -170,6 +191,7 @@ function render(data) {
     html += '<td>' + turbinhoHtml + '</td>';
     html += '<td>' + fdsHtml + '</td>';
     html += '<td style="font-weight:700;color:' + (bonusTotal > 0 ? '#10b981' : '#475569') + '">R$ ' + bonusTotal + '</td>';
+    html += '<td><button class="btn-criativos" data-fixed-idx="' + fi + '" onclick="showCriativos(' + fi + ')">Criativos</button></td>';
     html += '</tr>';
   });
 
@@ -263,6 +285,86 @@ function render(data) {
   app.innerHTML = html;
   initChartTooltip();
   initFreelaTooltip();
+}
+
+function showCriativos(idx) {
+  const ed = window._fixedEditorData && window._fixedEditorData[idx];
+  if (!ed) return;
+
+  const MONTHS_BR = ['Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const picker = document.getElementById('monthPicker');
+  let monthLabel = '';
+  if (picker && picker.value) {
+    const [y, m] = picker.value.split('-').map(Number);
+    monthLabel = MONTHS_BR[m - 1] + ' ' + y;
+  }
+
+  // Sort tasks by primeira_edicao desc
+  const tasks = (ed.tasks || []).slice().sort((a, b) => {
+    if (!a.primeira_edicao && !b.primeira_edicao) return 0;
+    if (!a.primeira_edicao) return 1;
+    if (!b.primeira_edicao) return -1;
+    return b.primeira_edicao.localeCompare(a.primeira_edicao);
+  });
+
+  let h = '<div class="card" style="margin-bottom:8px">';
+  h += '<button class="back-btn" onclick="hideCriativos()">&larr; Voltar</button>';
+  h += '<h2>' + ed.name + '</h2>';
+  h += '<div class="subtitle">Criativos editados &mdash; ' + monthLabel + ' &middot; ' + tasks.length + ' criativos &middot; ' + ed.pontos + ' pontos</div>';
+  h += '</div>';
+
+  h += '<div class="card">';
+  h += '<table class="detail-table"><thead><tr>';
+  h += '<th style="width:55%">Criativos editados</th><th style="width:10%">Pts</th><th style="width:20%">Primeira Edicao</th><th style="width:15%">Status</th>';
+  h += '</tr></thead><tbody>';
+
+  tasks.forEach(t => {
+    const url = t.task_id ? 'https://app.clickup.com/t/' + t.task_id : '#';
+    const nameHtml = '<a href="' + url + '" target="_blank" title="Abrir no ClickUp">' + (t.name || '—') + '</a>';
+
+    // Format primeira edicao
+    let peHtml = '—';
+    if (t.primeira_edicao) {
+      const d = new Date(t.primeira_edicao + 'T12:00:00');
+      if (!isNaN(d.getTime())) {
+        peHtml = String(d.getDate()) + '/' + String(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(2);
+      }
+    }
+
+    // Status pill with color
+    let statusHtml = '—';
+    if (t.status) {
+      const bg = t.status_color || '#475569';
+      // Determine text color based on brightness
+      const hex = bg.replace('#', '');
+      const r = parseInt(hex.substr(0,2),16) || 0;
+      const g = parseInt(hex.substr(2,2),16) || 0;
+      const b = parseInt(hex.substr(4,2),16) || 0;
+      const lum = (r * 299 + g * 587 + b * 114) / 1000;
+      const textCol = lum > 140 ? '#0f172a' : '#fff';
+      statusHtml = '<span class="status-pill" style="background:' + bg + ';color:' + textCol + '">' + t.status + '</span>';
+    }
+
+    h += '<tr>';
+    h += '<td>' + nameHtml + '</td>';
+    h += '<td style="text-align:center;font-weight:700;color:#10b981">' + t.pts + '</td>';
+    h += '<td style="text-align:center;color:#94a3b8;font-size:11px">' + peHtml + '</td>';
+    h += '<td style="text-align:center">' + statusHtml + '</td>';
+    h += '</tr>';
+  });
+
+  h += '</tbody></table></div>';
+
+  document.getElementById('main-content').style.display = 'none';
+  const detail = document.getElementById('criativos-detail');
+  detail.innerHTML = h;
+  detail.classList.add('active');
+}
+
+function hideCriativos() {
+  document.getElementById('criativos-detail').classList.remove('active');
+  document.getElementById('criativos-detail').innerHTML = '';
+  document.getElementById('main-content').style.display = '';
 }
 
 function initChartTooltip() {

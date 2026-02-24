@@ -325,7 +325,14 @@ function calculatePontos_(tasks) {
       if (!editorTaskWeights[editor.id]) editorTaskWeights[editor.id] = [];
       editorTaskWeights[editor.id].push(pontos);
       if (!editorTaskNames[editor.id]) editorTaskNames[editor.id] = [];
-      editorTaskNames[editor.id].push({ name: task.name, pontos: pontos });
+      editorTaskNames[editor.id].push({
+        name: task.name,
+        pontos: pontos,
+        task_id: task.id,
+        primeira_edicao: dateStr,
+        status: task.status ? task.status.status : '',
+        status_color: task.status ? task.status.color : '',
+      });
 
       // Track FDS tasks by weight
       if (fds) {
@@ -462,7 +469,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
   fixedEditors.forEach((e, i) => { e.rank = i + 1; });
   otherEditors.sort((a, b) => b.pontos - a.pontos);
 
-  // Assign bonus — fixed team only
+  // Assign bonus + tasks — fixed team only
   fixedEditors.forEach(e => {
     const bonusEntry = CONFIG.BONUS.productivity.find(b => b.rank === e.rank);
     const prodBonus = bonusEntry ? bonusEntry.value : 0;
@@ -483,6 +490,10 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
       fds_count: fdsCount,
       total: prodBonus + turboBonus + turbinhoBonus + fdsBonus,
     };
+    e.tasks = (editorTaskNames[e.id] || []).map(t => ({
+      name: t.name, pts: t.pontos, task_id: t.task_id,
+      primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
+    }));
   });
 
   // Assign bonus — other editors (freelas get per-task by weight, rest get nothing)
@@ -490,7 +501,10 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
     if (e.team === 'freela') {
       const weights = editorTaskWeights[e.id] || [];
       const freelaTotal = weights.reduce((sum, peso) => sum + (CONFIG.BONUS.freelaPerTask[peso] || 0), 0);
-      const tasks = (editorTaskNames[e.id] || []).map(t => ({ name: t.name, pts: t.pontos }));
+      const tasks = (editorTaskNames[e.id] || []).map(t => ({
+        name: t.name, pts: t.pontos, task_id: t.task_id,
+        primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
+      }));
       e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100, tasks: tasks };
     } else {
       e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, total: 0 };
@@ -511,6 +525,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
       name: e.name, team: e.team,
       totals: { raw_count: e.tasks_count, pontos: e.pontos },
       daily: e.daily, rank: e.rank, bonus: e.bonus,
+      tasks: e.tasks || (e.bonus && e.bonus.tasks) || [],
     })),
     turbo_days: turboDays,
     turbinho_summary: turbinhoData,
