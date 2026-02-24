@@ -33,6 +33,11 @@
 </head>
 <body>
 
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+  <label style="font-size:12px;color:#94a3b8">Mês:</label>
+  <input type="month" id="monthPicker" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit" />
+  <button onclick="loadMonth()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">Carregar</button>
+</div>
 <div id="app">
   <div class="loading" id="loading">Carregando dados...</div>
 </div>
@@ -40,7 +45,7 @@
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 // Replace with your Google Apps Script Web App URL after deploying
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwsf8fltl5IqdSOuTwZSIyeVZt16CHCLbmVe9MoGZHKzwFcTt6x723jCWiJxzxgzOrG/exec';
+const GAS_URL = '';
 const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
 const META_DIARIA = 6;
 const TURBO_THRESHOLD = 8;
@@ -208,7 +213,14 @@ function statCard(value, label, color) {
 
 // ─── Data Loading ────────────────────────────────────────────────────────────
 
-async function loadData() {
+async function loadMonth() {
+  const picker = document.getElementById('monthPicker');
+  if (picker.value) {
+    await loadData(picker.value);
+  }
+}
+
+async function loadData(month) {
   if (!GAS_URL) {
     // No GAS URL configured — show setup instructions
     document.getElementById('app').innerHTML =
@@ -230,8 +242,10 @@ async function loadData() {
     return;
   }
 
+  document.getElementById('app').innerHTML = '<div class="loading">Carregando dados...</div>';
   try {
-    const response = await fetch(GAS_URL);
+    const url = month ? GAS_URL + '?month=' + month : GAS_URL;
+    const response = await fetch(url);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const data = await response.json();
     render(data);
@@ -252,9 +266,13 @@ function testJson() {
 
 // ─── Init ────────────────────────────────────────────────────────────────────
 
+// Set month picker to current month
+const now = new Date();
+document.getElementById('monthPicker').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
 loadData();
 
-// Auto-refresh
+// Auto-refresh current month
 if (GAS_URL) {
   setInterval(loadData, REFRESH_INTERVAL);
 }

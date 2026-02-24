@@ -75,6 +75,13 @@ function getTasks_(listId, page) {
 function findField_(task, fieldName) {
   if (!task.custom_fields) return null;
   const needle = fieldName.toLowerCase();
+  // Try exact match first (ignoring emojis/symbols)
+  const stripEmoji = s => s.replace(/[^\p{L}\p{N}\s]/gu, '').trim().toLowerCase();
+  const exact = task.custom_fields.find(
+    cf => stripEmoji(cf.name) === needle
+  );
+  if (exact) return exact;
+  // Fallback: includes match
   return task.custom_fields.find(
     cf => cf.name.toLowerCase().includes(needle)
   );
@@ -173,15 +180,14 @@ function identifyType_(task) {
 }
 
 function extractEditors_(task) {
+  // Only use "Editor" custom field — never fall back to assignees
+  // (assignees can be accounts, clients, etc.)
   const field = findField_(task, 'Editor');
   if (field) {
     const val = parseFieldValue_(field);
     if (val && Array.isArray(val) && val.length > 0) {
       return val.map(u => ({ id: u.id, name: u.username || u.email || 'User ' + u.id }));
     }
-  }
-  if (task.assignees && task.assignees.length > 0) {
-    return task.assignees.map(a => ({ id: a.id, name: a.username || a.email || 'User ' + a.id }));
   }
   return [];
 }
@@ -472,9 +478,9 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
  * Main function — runs on trigger (2x/day).
  * Fetches data, calculates, caches result.
  */
-function videoCounterMain() {
+function videoCounterMain(customMonth) {
   const now = new Date();
-  const month = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
+  const month = customMonth || Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
 
   Logger.log('VideoCounter: Starting for month ' + month);
 
@@ -536,22 +542,37 @@ function videoCounterMain() {
  * Deploy as Web App to get URL for widget.
  */
 function doGet(e) {
-  // Allow CORS for widget embed
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
 
+  const requestedMonth = e && e.parameter && e.parameter.month ? e.parameter.month : null;
   const cache = PropertiesService.getScriptProperties();
-  const cached = cache.getProperty(CONFIG.CACHE_KEY);
 
-  if (cached) {
-    const timestamp = cache.getProperty(CONFIG.CACHE_KEY + '_TIMESTAMP') || 'unknown';
-    const data = JSON.parse(cached);
-    data.metadata.cached_at = timestamp;
-    output.setContent(JSON.stringify(data));
+  if (requestedMonth) {
+    // Specific month requested — check cache or generate
+    const cacheKey = CONFIG.CACHE_KEY + '_' + requestedMonth;
+    const cached = cache.getProperty(cacheKey);
+    if (cached) {
+      const data = JSON.parse(cached);
+      data.metadata.cached_at = cache.getProperty(cacheKey + '_TS') || 'unknown';
+      output.setContent(JSON.stringify(data));
+    } else {
+      const report = videoCounterMain(requestedMonth);
+      cache.setProperty(cacheKey, JSON.stringify(report));
+      cache.setProperty(cacheKey + '_TS', new Date().toISOString());
+      output.setContent(JSON.stringify(report));
+    }
   } else {
-    // First run — generate now
-    const report = videoCounterMain();
-    output.setContent(JSON.stringify(report));
+    // Default: current month (cached)
+    const cached = cache.getProperty(CONFIG.CACHE_KEY);
+    if (cached) {
+      const data = JSON.parse(cached);
+      data.metadata.cached_at = cache.getProperty(CONFIG.CACHE_KEY + '_TIMESTAMP') || 'unknown';
+      output.setContent(JSON.stringify(data));
+    } else {
+      const report = videoCounterMain();
+      output.setContent(JSON.stringify(report));
+    }
   }
 
   return output;
