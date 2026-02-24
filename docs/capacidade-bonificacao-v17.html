@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AllFluence — Capacidade & Bonificação v2.0</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+  select, input, button { font-family: inherit; }
+  table { border-collapse: collapse; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const FORMATS = [
+  { id: "bbb", name: "BBB React", weight: 1, timeMin: 30, color: "#ffe600", textColor: "#000", complexity: "Baixa", desc: "Vídeos curtos react (30-45s)" },
+  { id: "symphony", name: "Symphony/IA", weight: 1, timeMin: 30, color: "#06b6d4", textColor: "#000", complexity: "Baixa-Média", desc: "Edição de conteúdo gerado por IA" },
+  { id: "ttcx", name: "TTCX Anúncios", weight: 2, timeMin: 90, color: "#00f2ea", textColor: "#000", complexity: "Média-Alta", desc: "Anúncios TikTok (15-60s)" },
+  { id: "gov", name: "Governo/Institucional", weight: 2, timeMin: 75, color: "#4ade80", textColor: "#000", complexity: "Média", desc: "Vídeos curtos influenciadores" },
+  { id: "motion", name: "Motion Graphics", weight: 4, timeMin: 240, color: "#a855f7", textColor: "#fff", complexity: "Alta", desc: "Animações e efeitos avançados" },
+  { id: "longform", name: "Long Form (YouTube)", weight: 5, timeMin: 360, color: "#ef4444", textColor: "#fff", complexity: "Alta", desc: "Vídeos longos, podcasts" },
+  { id: "clp", name: "CLP", weight: 1, timeMin: 60, color: "#f97316", textColor: "#000", complexity: "Média", desc: "Creative Landing Pages" },
+];
+
+const ROLES_DEF = [
+  { id: "editor", name: "Editor", color: "#60a5fa", canWork: ["bbb", "gov", "clp", "symphony"] },
+  { id: "revisor", name: "Revisor", color: "#f59e0b", canWork: ["bbb", "ttcx", "gov", "clp", "symphony"] },
+  { id: "especialista", name: "Especialista", color: "#a855f7", canWork: ["motion", "longform", "ttcx"] },
+];
+
+const PEOPLE = [
+  { id: "PX", name: "Pedro Ximenes", short: "Pedro", role: "head", color: "#8b5cf6", salary: null, tenure: "2+ anos" },
+  { id: "LE", name: "Lílian Elen", short: "Lílian", role: "head", color: "#8b5cf6", salary: null, tenure: "2+ anos" },
+  { id: "RN", name: "Rafael Nóbrega", short: "Rafael", role: "revisor", color: "#f59e0b", salary: 2300, tenure: "1+ ano" },
+  { id: "RA", name: "Ricardo Araújo", short: "Ricardo", role: "revisor", color: "#f59e0b", salary: 2300, tenure: "1+ ano" },
+  { id: "DL", name: "Daniel Lopes", short: "Daniel", role: "revisor", color: "#f59e0b", salary: 2000, tenure: "6 meses" },
+  { id: "BF", name: "Bruna Ferreira", short: "Bruna", role: "editor", color: "#3b82f6", salary: 2300, tenure: "1+ ano" },
+  { id: "VM", name: "Vinícius Mendes", short: "Vinícius", role: "editor", color: "#3b82f6", salary: 2000, tenure: "6 meses" },
+];
+
+const BONUS_CONFIG = {
+  productivity: [
+    { rank: 1, label: "🥇 1º lugar", value: 500, desc: "Editor com mais pontos no mês" },
+    { rank: 2, label: "🥈 2º lugar", value: 250, desc: "Segundo maior total de pontos" },
+  ],
+  turbo: { value: 100, desc: "Editor ultrapassa TURBO no dia" },
+  metaDiaria: 6, // meta mínima diária: 6 pontos
+  turboThreshold: 8, // TURBO: 8+ pontos no dia
+  turbinho: { value: 20, desc: "Criativo aprovado sem ajuste (direto)" },
+  fds: { perPonto: 10, desc: "Edição em FDS/feriado", tags: ["fds edição", "feriado edição"] },
+  freelaPerPonto: 35, // R$ por ponto (freela)
+  ajusteStatuses: ["para ajustar", "para ajustar cliente"],
+};
+
+const SALARY_TABLE = [
+  { label: "Editor Novo (entrada)", value: 2000, type: "novo" },
+  { label: "Editor (1+ ano, pós-reajuste)", value: 2300, type: "antigo" },
+  { label: "Revisor Novo (entrada)", value: 2300, type: "novo" },
+  { label: "Revisor (1+ ano, pós-reajuste)", value: 2500, type: "antigo" },
+  { label: "Editor Temporário (3 meses)", value: 2000, type: "temp" },
+];
+
+const WH = 8;
+
+const FEV_DATA = [
+  { day: 1, weekday: "Dom", project: "BBB", cota: "[P06] MODA", qty: 28, team: "FREELA", editors: 7, sobram: 3, revisor: "Pedro", freelas: ["Bianca (4v)", "Duda (2v)"] },
+  { day: 7, weekday: "Sáb", project: "BBB", cota: "[P07] CPG: COMPRAS DO MÊS", qty: 24, team: "FIXO", editors: 4, sobram: 4 },
+  { day: 8, weekday: "Dom", project: "BBB", cota: "[P08] MODA", qty: 28, team: "FIXO", editors: 5, sobram: 3 },
+  { day: 10, weekday: "Ter", project: "BBB", cota: "[P09] BIG: BIG FONE", qty: 34, team: "FIXO + FREELA", editors: 6, sobram: 4, freelas: ["Freela (3v)", "Bianca (4v)", "Aghata (2v)"] },
+  { day: 14, weekday: "Sáb", project: "BBB", cota: "[P10] CPG: ESQUENTA CARNAVAL", qty: 22, team: "FIXO", editors: 4, sobram: 2 },
+  { day: 15, weekday: "Dom", project: "BBB", cota: "[P11] MODA", qty: 27, team: "FIXO", editors: 5, sobram: 2, freelas: ["Freela (2v)"] },
+  { day: 21, weekday: "Sáb", project: "BBB", cota: "[P12] CPG: FOLIA DE OFERTAS", qty: 24, team: "FIXO", editors: 4, sobram: 4, freelas: ["Freela (3v)"] },
+  { day: 22, weekday: "Dom", project: "BBB", cota: "[P13] MODA", qty: 28, team: "FIXO + FREELA", editors: 5, sobram: 3, freelas: ["Freela (3v)"] },
+  { day: 28, weekday: "Sáb", project: "BBB", cota: "[P14] CPG: SEMANA DO DETOX", qty: 23, team: "FREELA", editors: 4, sobram: 3 },
+];
+
+const CYCLES = [
+  { name: "Ciclo 2", total: 80, days: [1] },
+  { name: "Ciclo 3", total: 52, days: [7, 8] },
+  { name: "Ciclo 4", total: 83, days: [10, 14, 15] },
+  { name: "Ciclo 5", total: 52, days: [21, 22] },
+  { name: "Ciclo 6", total: 23, days: [28] },
+];
+
+// Escala rotativa: 2 pessoas de folga por dia, todos rotacionam
+// Cobertura: 1 head + 1 rev + 2 ed (padrão) | 2 rev + 2 ed (sem head) | mín: 1 rev + 1 ed
+const ESCALA = {
+  // Semana 1 (1-7)
+  1: ["PX", "DL"],   // LE(h) RN(r) RA(r) BF(e) VM(e) → 1h+2r+2e
+  2: ["LE", "RA"],   // PX(h) RN(r) DL(r) BF(e) VM(e) → 1h+2r+2e
+  3: ["RN", "BF"],   // PX(h) LE(h) RA(r) DL(r) VM(e) → 2h+2r+1e
+  4: ["PX", "VM"],   // LE(h) RN(r) RA(r) DL(r) BF(e) → 1h+3r+1e
+  5: ["LE", "DL"],   // PX(h) RN(r) RA(r) BF(e) VM(e) → 1h+2r+2e
+  6: ["RA", "BF"],   // PX(h) LE(h) RN(r) DL(r) VM(e) → 2h+2r+1e
+  7: ["RN", "VM"],   // PX(h) LE(h) RA(r) DL(r) BF(e) → 2h+2r+1e
+  // Semana 2 (8-14)
+  8: ["RA", "BF"],   // PX(h) LE(h) RN(r) DL(r) VM(e) → 2h+2r+1e
+  9: ["PX", "VM"],   // LE(h) RN(r) RA(r) DL(r) BF(e) → 1h+3r+1e
+  10: ["LE", "DL"],  // PX(h) RN(r) RA(r) BF(e) VM(e) → 1h+2r+2e
+  11: ["RN", "BF"],  // PX(h) LE(h) RA(r) DL(r) VM(e) → 2h+2r+1e
+  12: ["PX", "RA"],  // LE(h) RN(r) DL(r) BF(e) VM(e) → 1h+2r+2e
+  13: ["DL", "VM"],  // PX(h) LE(h) RN(r) RA(r) BF(e) → 2h+2r+1e
+  14: ["LE", "RN"],  // PX(h) RA(r) DL(r) BF(e) VM(e) → 1h+2r+2e
+  // Semana 3 (15-21)
+  15: ["PX", "RN"],  // LE(h) RA(r) DL(r) BF(e) VM(e) → 1h+2r+2e
+  16: ["LE", "VM"],  // PX(h) RN(r) RA(r) DL(r) BF(e) → 1h+3r+1e
+  17: ["DL", "BF"],  // PX(h) LE(h) RN(r) RA(r) VM(e) → 2h+2r+1e
+  18: ["RA", "VM"],  // PX(h) LE(h) RN(r) DL(r) BF(e) → 2h+2r+1e
+  19: ["PX", "DL"],  // LE(h) RN(r) RA(r) BF(e) VM(e) → 1h+2r+2e
+  20: ["LE", "BF"],  // PX(h) RN(r) RA(r) DL(r) VM(e) → 1h+3r+1e
+  21: ["RN", "RA"],  // PX(h) LE(h) DL(r) BF(e) VM(e) → 2h+1r+2e
+  // Semana 4 (22-28)
+  22: ["LE", "DL"],  // PX(h) RN(r) RA(r) BF(e) VM(e) → 1h+2r+2e
+  23: ["PX", "VM"],  // LE(h) RN(r) RA(r) DL(r) BF(e) → 1h+3r+1e
+  24: ["RA", "BF"],  // PX(h) LE(h) RN(r) DL(r) VM(e) → 2h+2r+1e
+  25: ["RN", "VM"],  // PX(h) LE(h) RA(r) DL(r) BF(e) → 2h+2r+1e
+  26: ["PX", "DL"],  // LE(h) RN(r) RA(r) BF(e) VM(e) → 1h+2r+2e
+  27: ["LE", "BF"],  // PX(h) RN(r) RA(r) DL(r) VM(e) → 1h+3r+1e
+  28: ["RN", "RA"],  // PX(h) LE(h) DL(r) BF(e) VM(e) → 2h+1r+2e
+};
+
+function getDayInfo(d) {
+  const wd = new Date(2026, 1, d).getDay();
+  const wdNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const isFds = wd === 0 || wd === 6;
+  const entry = FEV_DATA.find(e => e.day === d);
+  let folga = null;
+  let working = PEOPLE.map(p => p.id);
+  if (ESCALA[d]) {
+    folga = ESCALA[d];
+    working = PEOPLE.filter(p => !ESCALA[d].includes(p.id)).map(p => p.id);
+  }
+  return { d, wd, wdName: wdNames[wd], isFds, entry, folga, working };
+}
+
+function App() {
+  const [tab, setTab] = useState("calendario");
+  const [simProjects, setSimProjects] = useState([{ formatId: "bbb", qty: 15 }, { formatId: "ttcx", qty: 8 }]);
+  const [simExtraEd, setSimExtraEd] = useState(0);
+  const [freelasD, setFreelasD] = useState(10);
+
+  const eds = PEOPLE.filter(p => p.role === "editor");
+  const revs = PEOPLE.filter(p => p.role === "revisor");
+  const fixoCap = useMemo(() => Math.round((eds.length + simExtraEd) * WH * 60 + revs.length * WH * 60 * 1.2), [eds.length, revs.length, simExtraEd]);
+  const fPP = WH * 60 * 0.8;
+  const fTot = freelasD * fPP;
+
+  const simDem = useMemo(() => {
+    let m = 0, w = 0;
+    simProjects.forEach(p => { const f = FORMATS.find(x => x.id === p.formatId); if (f) { m += p.qty * f.timeMin; w += p.qty * f.weight; } });
+    return { mins: m, w };
+  }, [simProjects]);
+
+  const ly = useMemo(() => {
+    const fp = fixoCap > 0 ? Math.round(simDem.mins / fixoCap * 100) : 0;
+    const ov = Math.max(0, simDem.mins - fixoCap);
+    const fu = Math.min(ov > 0 ? Math.ceil(ov / fPP) : 0, freelasD);
+    const fpp = fTot > 0 ? Math.round(ov / fTot * 100) : 0;
+    const ro = Math.max(0, ov - fu * fPP);
+    let st, sl, sc;
+    if (fp <= 90) { st = "ok"; sl = "Time fixo absorve"; sc = "#10b981"; }
+    else if (fp <= 100) { st = "warn"; sl = "Time fixo no limite"; sc = "#f59e0b"; }
+    else if (ro === 0) { st = "fr"; sl = `Freelas acionados (${fu}/${freelasD})`; sc = "#f97316"; }
+    else { st = "crit"; sl = "Sobrecarga"; sc = "#ef4444"; }
+    return { fp, ov, fu, fpp, ro, st, sl, sc };
+  }, [simDem, fixoCap, fTot, fPP, freelasD]);
+
+  const febDays = Array.from({ length: 28 }, (_, i) => getDayInfo(i + 1));
+
+  const febStats = useMemo(() => {
+    const tv = FEV_DATA.reduce((a, e) => a + e.qty, 0);
+    const dd = FEV_DATA.length;
+    const fd = FEV_DATA.filter(e => e.weekday === "Sáb" || e.weekday === "Dom").length;
+    const mx = FEV_DATA.reduce((a, e) => e.qty > a.qty ? e : a, FEV_DATA[0]);
+    const fl = FEV_DATA.filter(e => e.team.includes("FREELA")).length;
+    return { tv, dd, fd, mx, fl };
+  }, []);
+
+  // === Contagem state ===
+  const [contagemMode, setContagemMode] = useState("manual"); // "manual" | "json"
+  const [contagemMonth, setContagemMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const activeFormats = FORMATS.filter(f => ["bbb", "symphony", "ttcx", "gov", "motion", "longform", "clp"].includes(f.id));
+  const editorsOnly = PEOPLE.filter(p => p.role !== "head");
+  const initManualData = () => {
+    const data = {};
+    editorsOnly.forEach(p => { data[p.id] = {}; activeFormats.forEach(f => { data[p.id][f.id] = 0; }); });
+    return data;
+  };
+  const [manualData, setManualData] = useState(initManualData);
+  const [importedData, setImportedData] = useState(null);
+  const [freelaData, setFreelaData] = useState([]); // [{name, formats: {bbb: 0, ...}}]
+
+  const contagemData = useMemo(() => {
+    if (contagemMode === "json" && importedData) return importedData;
+    // Build from manual data — peso = pontos (sem divisão)
+    const editors = editorsOnly.map(p => {
+      const formats = {};
+      let rawCount = 0, totalPontos = 0;
+      activeFormats.forEach(f => {
+        const count = manualData[p.id]?.[f.id] || 0;
+        const pontos = count * f.weight;
+        formats[f.id] = { count, pontos };
+        rawCount += count;
+        totalPontos += pontos;
+      });
+      return { id: p.id, name: p.name, short: p.short, team: "fixed", formats, totals: { raw_count: rawCount, pontos: totalPontos } };
+    });
+    // Add freelas
+    freelaData.forEach(fl => {
+      const formats = {};
+      let rawCount = 0, totalPontos = 0;
+      activeFormats.forEach(f => {
+        const count = fl.formats?.[f.id] || 0;
+        const pontos = count * f.weight;
+        formats[f.id] = { count, pontos };
+        rawCount += count;
+        totalPontos += pontos;
+      });
+      editors.push({ id: `freela-${fl.name}`, name: fl.name, short: fl.name, team: "freela", formats, totals: { raw_count: rawCount, pontos: totalPontos } });
+    });
+    // Sort and rank (fixed team only for ranking)
+    const fixed = editors.filter(e => e.team === "fixed").sort((a, b) => b.totals.pontos - a.totals.pontos);
+    fixed.forEach((e, i) => { e.rank = i + 1; });
+    const freelas = editors.filter(e => e.team === "freela").sort((a, b) => b.totals.pontos - a.totals.pontos);
+    // Bonus calc (manual mode: turbo/turbinho/fds are 0 since they need ClickUp data)
+    fixed.forEach(e => {
+      const prod = e.rank === 1 ? 500 : e.rank === 2 ? 250 : 0;
+      e.bonus = { productivity: prod, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, fds_pontos: 0, total: prod };
+    });
+    freelas.forEach(e => {
+      e.bonus = { freelaTotal: Math.round(e.totals.pontos * BONUS_CONFIG.freelaPerPonto * 100) / 100 };
+    });
+    return { fixed, freelas, month: contagemMonth };
+  }, [manualData, importedData, contagemMode, contagemMonth, freelaData]);
+
+  const handleJsonImport = (jsonStr) => {
+    try {
+      const data = JSON.parse(jsonStr);
+      if (data.editors) {
+        const fixed = data.editors.filter(e => e.team === "fixed").sort((a, b) => b.totals.pontos - a.totals.pontos);
+        fixed.forEach((e, i) => { e.rank = i + 1; e.short = e.name.split(" ")[0]; });
+        const freelas = data.editors.filter(e => e.team === "freela").sort((a, b) => b.totals.pontos - a.totals.pontos);
+        freelas.forEach(e => { e.short = e.name.split(" ")[0]; });
+        fixed.forEach(e => {
+          const prod = e.rank === 1 ? 500 : e.rank === 2 ? 250 : 0;
+          if (!e.bonus) e.bonus = {};
+          e.bonus.productivity = prod;
+          // Preserve turbinho, fds from imported data
+          const turboVal = e.bonus.turbo || 0;
+          const turbinhoVal = e.bonus.turbinho || 0;
+          const fdsVal = e.bonus.fds || 0;
+          e.bonus.total = prod + turboVal + turbinhoVal + fdsVal;
+        });
+        freelas.forEach(e => {
+          if (!e.bonus) e.bonus = {};
+          e.bonus.freelaTotal = Math.round(e.totals.pontos * BONUS_CONFIG.freelaPerPonto * 100) / 100;
+        });
+        setImportedData({ fixed, freelas, month: data.metadata?.month || contagemMonth, turbo_days: data.turbo_days || {}, turbinho_summary: data.turbinho_summary || {} });
+      }
+    } catch (err) { alert("Erro ao importar JSON: " + err.message); }
+  };
+
+  const tabs = [
+    { id: "calendario", label: "📅 Calendário" },
+    { id: "escala", label: "🔄 Escala" },
+    { id: "dashboard", label: "📊 Dashboard" },
+    { id: "pesos", label: "⚖️ Pesos" },
+    { id: "contagem", label: "🔢 Contagem" },
+    { id: "bonus", label: "💰 Bonificação" },
+    { id: "remuneracao", label: "💵 Remuneração" },
+    { id: "simulador", label: "🧮 Simulador" },
+    { id: "time", label: "👥 Time" },
+    { id: "matriz", label: "📋 Matriz" },
+  ];
+
+  const Bar = ({ label, pct, color, cap, used, icon }) => (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{icon} {label}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>{used}/{cap} min</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color }}>{pct}%</span>
+        </div>
+      </div>
+      <div style={{ background: "#334155", borderRadius: 8, height: 20, overflow: "hidden" }}>
+        <div style={{ width: `${Math.min(pct, 100)}%`, height: "100%", background: `linear-gradient(90deg,${color},${color}cc)`, borderRadius: 8, transition: "width 0.5s" }} />
+      </div>
+    </div>
+  );
+
+  const PersonBadge = ({ id, small }) => {
+    const p = PEOPLE.find(x => x.id === id);
+    if (!p) return null;
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: `${p.color}22`, color: p.color, padding: small ? "1px 4px" : "2px 6px", borderRadius: 6, fontSize: small ? 9 : 11, fontWeight: 600, whiteSpace: "nowrap" }}>
+        {small ? p.id : p.short}
+      </span>
+    );
+  };
+
+  return (
+    <div style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", background: "#0f172a", minHeight: "100vh", color: "#e2e8f0" }}>
+      <div style={{ maxWidth: 1060, margin: "0 auto", padding: "24px 16px" }}>
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#f8fafc", margin: 0 }}>AllFluence — Capacidade & Bonificação</h1>
+          <p style={{ fontSize: 13, color: "#94a3b8", margin: "4px 0 0" }}>Sistema de Gestão do Time de Edição v2.0</p>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: tab === t.id ? "#3b82f6" : "#1e293b", color: tab === t.id ? "#fff" : "#94a3b8" }}>{t.label}</button>
+          ))}
+        </div>
+
+        <div style={{ background: "#1e293b", borderRadius: 16, padding: 24 }}>
+
+          {/* ===== CALENDÁRIO ===== */}
+          {tab === "calendario" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Calendário — Fevereiro 2026</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Entregas + folgas + cobertura do time por dia</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 10, marginBottom: 20 }}>
+                {[
+                  { n: febStats.tv, l: "Vídeos no mês", c: "#ffe600" },
+                  { n: febStats.dd, l: "Dias de entrega", c: "#3b82f6" },
+                  { n: "5", l: "Time/dia (média)", c: "#a78bfa" },
+                  { n: febStats.fd, l: "Entregas no FDS", c: "#f97316" },
+                  { n: febStats.fl, l: "Dias c/ freela", c: "#10b981" },
+                  { n: febStats.mx.qty, l: "Pico (1 dia)", c: "#ef4444" },
+                ].map((c, i) => (
+                  <div key={i} style={{ background: `${c.c}11`, border: `1px solid ${c.c}33`, borderRadius: 10, padding: 12, textAlign: "center" }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: c.c }}>{c.n}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{c.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 20 }}>
+                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
+                  <div key={d} style={{ textAlign: "center", fontSize: 11, color: "#64748b", padding: 4, fontWeight: 600 }}>{d}</div>
+                ))}
+                {febDays.map(day => {
+                  const has = !!day.entry;
+                  const isFolga = !!day.folga;
+                  let bg = "#0f172a", border = "1px solid #1e293b";
+                  if (has && day.entry.qty >= 30) { bg = "#ef444422"; border = "1px solid #ef444444"; }
+                  else if (has && day.entry.team.includes("FREELA")) { bg = "#f9731622"; border = "1px solid #f9731644"; }
+                  else if (has) { bg = "#3b82f622"; border = "1px solid #3b82f644"; }
+                  else if (isFolga) { bg = "#a78bfa08"; border = "1px solid #a78bfa22"; }
+                  return (
+                    <div key={day.d} style={{ background: bg, border, borderRadius: 8, padding: 5, minHeight: 80 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 11, color: day.isFds ? "#f97316" : "#94a3b8", fontWeight: 600 }}>{day.d}</span>
+                        {isFolga && <span style={{ fontSize: 8, background: "#a78bfa33", color: "#a78bfa", padding: "1px 4px", borderRadius: 4 }}>FOLGA</span>}
+                      </div>
+                      {has && (
+                        <div style={{ marginTop: 3 }}>
+                          <div style={{ fontSize: 18, fontWeight: 800, color: day.entry.qty >= 30 ? "#ef4444" : "#ffe600" }}>{day.entry.qty}</div>
+                          <div style={{ fontSize: 8, color: "#94a3b8" }}>{day.entry.team}</div>
+                        </div>
+                      )}
+                      {!has && isFolga && (
+                        <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 2 }}>
+                          {day.working.slice(0, 3).map(id => <PersonBadge key={id} id={id} small />)}
+                          {day.working.length > 3 && <span style={{ fontSize: 8, color: "#64748b" }}>+{day.working.length - 3}</span>}
+                        </div>
+                      )}
+                      {!has && !isFolga && (
+                        <div style={{ marginTop: 10, fontSize: 9, color: "#334155", textAlign: "center" }}>—</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legenda */}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16, fontSize: 11 }}>
+                {[
+                  { c: "#3b82f6", l: "Entrega (fixo)" }, { c: "#f97316", l: "Entrega (c/ freela)" },
+                  { c: "#ef4444", l: "Pico (30+ vídeos)" }, { c: "#a78bfa", l: "Folga" },
+                ].map((x, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: 3, background: `${x.c}33`, border: `1px solid ${x.c}66` }} />
+                    <span style={{ color: "#94a3b8" }}>{x.l}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Entries detail */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>📋 Detalhamento por Entrega</h3>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {FEV_DATA.map((e, i) => {
+                    const isFds = e.weekday === "Sáb" || e.weekday === "Dom";
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#1e293b", borderRadius: 10, borderLeft: `4px solid ${e.team.includes("FREELA") ? "#f97316" : "#3b82f6"}` }}>
+                        <div style={{ minWidth: 50, textAlign: "center" }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: isFds ? "#f97316" : "#e2e8f0" }}>{String(e.day).padStart(2, "0")}/02</div>
+                          <div style={{ fontSize: 10, color: "#64748b" }}>{e.weekday}</div>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{e.cota}</div>
+                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                            {e.team} · {e.editors} editores
+                            {e.freelas && <span style={{ color: "#f97316" }}> · {e.freelas.join(", ")}</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 20, fontWeight: 800, color: e.qty >= 30 ? "#ef4444" : "#ffe600" }}>{e.qty}</div>
+                        </div>
+                        {isFds && <div style={{ background: "#f9731633", color: "#f97316", padding: "2px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600 }}>FDS</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Ciclos */}
+              <div style={{ marginTop: 16, background: "#0f172a", borderRadius: 12, padding: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>📊 Totais por Ciclo</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
+                  {CYCLES.map((c, i) => (
+                    <div key={i} style={{ background: "#1e293b", borderRadius: 10, padding: 14, textAlign: "center" }}>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 4 }}>{c.name}</div>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: c.total > 60 ? "#ef4444" : c.total > 40 ? "#f59e0b" : "#10b981" }}>{c.total}</div>
+                      <div style={{ fontSize: 10, color: "#64748b" }}>{c.days.length} entrega(s)</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16, padding: 16, background: "#172554", borderRadius: 12 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: "#60a5fa", marginBottom: 8 }}>💰 Custos Freela</h4>
+                <div style={{ fontSize: 12, color: "#93c5fd", lineHeight: 1.8 }}>
+                  <strong>BBB (freela no FDS):</strong> R$ 35/vídeo · <strong>TTCX (FDS):</strong> R$ 50/vídeo<br />
+                  <strong>Controvo:</strong> Sem data definida — FDS incluso com escala de folga interna.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===== ESCALA ===== */}
+          {tab === "escala" && (() => {
+            // Calcula folgas por pessoa no mês
+            const folgasPorPessoa = {};
+            PEOPLE.forEach(p => { folgasPorPessoa[p.id] = 0; });
+            for (let d = 1; d <= 28; d++) {
+              if (ESCALA[d]) ESCALA[d].forEach(id => { folgasPorPessoa[id] = (folgasPorPessoa[id] || 0) + 1; });
+            }
+            // Calcula cobertura por dia
+            const getCoverage = (working) => {
+              const heads = working.filter(id => PEOPLE.find(p => p.id === id)?.role === "head").length;
+              const revs = working.filter(id => PEOPLE.find(p => p.id === id)?.role === "revisor").length;
+              const eds = working.filter(id => PEOPLE.find(p => p.id === id)?.role === "editor").length;
+              let label, color;
+              if (heads >= 1 && revs >= 1 && eds >= 2) { label = "Padrão"; color = "#10b981"; }
+              else if (revs >= 2 && eds >= 2) { label = "Sem head"; color = "#3b82f6"; }
+              else if (revs >= 1 && eds >= 1) { label = "Mínima"; color = "#f59e0b"; }
+              else { label = "Insuficiente"; color = "#ef4444"; }
+              return { heads, revs, eds, label, color };
+            };
+            return (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Escala de Folgas — Fevereiro 2026</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Rotação individual — todos folgam 2 dias/semana. Cobertura mínima garantida todo dia.</p>
+
+              {/* Regras de cobertura */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>📋 Regras de Cobertura</h3>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {[
+                    { icon: "✅", title: "Cobertura padrão", desc: "1 head + 1 revisor + 2 editores", c: "#10b981" },
+                    { icon: "🔄", title: "Cobertura alternativa (sem head)", desc: "2 revisores + 2 editores", c: "#3b82f6" },
+                    { icon: "⚠️", title: "Mínimo absoluto", desc: "1 revisor + 1 editor", c: "#f59e0b" },
+                    { icon: "🚨", title: "Regra de pico (30+ vídeos)", desc: "Folgas são remanejadas para outros dias da semana. Ninguém perde folga, só muda o dia. Freelas acionados como reforço.", c: "#ef4444" },
+                  ].map((r, i) => (
+                    <div key={i} style={{ display: "flex", gap: 12, padding: 14, background: "#1e293b", borderRadius: 10 }}>
+                      <div style={{ fontSize: 22 }}>{r.icon}</div>
+                      <div><div style={{ fontWeight: 600, color: r.c }}>{r.title}</div><div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{r.desc}</div></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Regras da escala */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>🔄 Como Funciona a Rotação</h3>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {[
+                    { icon: "👤", title: "Individual, não por grupo", desc: "Cada pessoa folga 2 dias/semana. Não existem grupos fixos — a combinação muda toda semana conforme demanda.", c: "#8b5cf6" },
+                    { icon: "📅", title: "Definição semanal (Weekly)", desc: "Escala definida na segunda-feira na Weekly. Head verifica demanda confirmada e distribui folgas garantindo cobertura.", c: "#f59e0b" },
+                    { icon: "🔒", title: "Restrição: editores nunca folgam juntos", desc: "Com 2 editores no time, pelo menos 1 precisa estar presente todo dia. Bruna e Vinícius nunca folgam no mesmo dia.", c: "#ef4444" },
+                    { icon: "📊", title: "2 de folga, 5 trabalhando", desc: "Todo dia, exatamente 2 pessoas folgam e 5 trabalham. Isso garante cobertura mínima sempre.", c: "#10b981" },
+                  ].map((r, i) => (
+                    <div key={i} style={{ display: "flex", gap: 12, padding: 14, background: "#1e293b", borderRadius: 10 }}>
+                      <div style={{ fontSize: 22 }}>{r.icon}</div>
+                      <div><div style={{ fontWeight: 600, color: r.c }}>{r.title}</div><div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{r.desc}</div></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Folgas por pessoa */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>👤 Folgas por Pessoa (Fevereiro)</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 8 }}>
+                  {PEOPLE.map(p => (
+                    <div key={p.id} style={{ background: "#1e293b", borderRadius: 10, padding: 12, textAlign: "center", borderLeft: `3px solid ${p.color}` }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: p.color }}>{p.short}</div>
+                      <div style={{ fontSize: 10, color: "#64748b" }}>{p.role === "head" ? "Head" : p.role === "revisor" ? "Revisor" : "Editor"}</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: "#e2e8f0", marginTop: 4 }}>{folgasPorPessoa[p.id]}</div>
+                      <div style={{ fontSize: 9, color: "#64748b" }}>dias de folga</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tabela semanal */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>📊 Escala Fevereiro (Exemplo de Rotação)</h3>
+                <p style={{ fontSize: 11, color: "#64748b", marginBottom: 12 }}>Escala real é definida na Weekly de cada semana conforme demanda confirmada</p>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #334155" }}>
+                        <th style={{ textAlign: "left", padding: 8, color: "#94a3b8" }}>Semana</th>
+                        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(d => (
+                          <th key={d} style={{ textAlign: "center", padding: 8, color: "#94a3b8", minWidth: 80 }}>{d}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: "Sem 1 (1-7)", start: 1 },
+                        { label: "Sem 2 (8-14)", start: 8 },
+                        { label: "Sem 3 (15-21)", start: 15 },
+                        { label: "Sem 4 (22-28)", start: 22 },
+                      ].map((week, wi) => (
+                        <tr key={wi} style={{ borderBottom: "1px solid #1e293b" }}>
+                          <td style={{ padding: 8, fontWeight: 600, fontSize: 11, whiteSpace: "nowrap" }}>{week.label}</td>
+                          {Array.from({ length: 7 }, (_, di) => {
+                            const d = week.start + di;
+                            if (d > 28) return <td key={di} />;
+                            const info = getDayInfo(d);
+                            const cov = getCoverage(info.working);
+                            return (
+                              <td key={di} style={{ padding: 6, textAlign: "center", background: info.entry ? "#ffe60011" : "#a78bfa08", borderRadius: 6, verticalAlign: "top" }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: info.isFds ? "#f97316" : "#e2e8f0" }}>{d}</div>
+                                {info.folga && (
+                                  <div style={{ marginTop: 3 }}>
+                                    <div style={{ fontSize: 8, color: "#a78bfa", marginBottom: 2 }}>Folga:</div>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 1, justifyContent: "center" }}>
+                                      {info.folga.map(id => <PersonBadge key={id} id={id} small />)}
+                                    </div>
+                                  </div>
+                                )}
+                                {info.entry && <div style={{ fontSize: 10, fontWeight: 700, color: "#ffe600", marginTop: 2 }}>{info.entry.qty}v</div>}
+                                <div style={{ fontSize: 8, color: cov.color, marginTop: 2 }}>{cov.heads}h {cov.revs}r {cov.eds}e</div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 12, fontSize: 10 }}>
+                  {[
+                    { c: "#10b981", l: "Padrão (1h+1r+2e)" },
+                    { c: "#3b82f6", l: "Sem head (2r+2e)" },
+                    { c: "#f59e0b", l: "Mínima (1r+1e)" },
+                  ].map((x, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: x.c }} />
+                      <span style={{ color: "#94a3b8" }}>{x.l}</span>
+                    </div>
+                  ))}
+                  <span style={{ color: "#64748b" }}>h=head r=revisor e=editor</span>
+                </div>
+              </div>
+
+              {/* Como lidar com imprevisibilidade */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, border: "1px solid #f59e0b33" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: "#f59e0b", marginBottom: 12 }}>⚠️ E quando não sabemos quais projetos vão entrar?</h3>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {[
+                    { step: "1", title: "Weekly na segunda: escala definida", desc: "Na reunião semanal (segunda), a escala da semana é definida com base nos projetos já confirmados. Ajustes podem acontecer ao longo da semana.", c: "#10b981" },
+                    { step: "2", title: "Projeto confirmado → verifica cobertura", desc: "Quando a entrega é confirmada, o head verifica se o time escalado no dia tem capacidade suficiente.", c: "#3b82f6" },
+                    { step: "3", title: "Se não basta → troca de folga", desc: "Quem está de folga troca o dia com alguém da mesma semana. Freelas são acionados como backup. Ninguém perde folga.", c: "#f59e0b" },
+                    { step: "4", title: "Pico (30+ vídeos) → time todo remanejado", desc: "Todo o time fixo é remanejado para o dia de pico. Freelas também podem ser acionados. As folgas de todos são redistribuídas para outros dias da semana.", c: "#ef4444" },
+                  ].map((s, i) => (
+                    <div key={i} style={{ display: "flex", gap: 12, padding: 14, background: "#1e293b", borderRadius: 10 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${s.c}22`, color: s.c, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, flexShrink: 0 }}>{s.step}</div>
+                      <div><div style={{ fontWeight: 600, fontSize: 13, color: s.c }}>{s.title}</div><div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{s.desc}</div></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            );
+          })()}
+
+          {/* ===== DASHBOARD ===== */}
+          {tab === "dashboard" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Capacidade em Camadas</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Freelas só acionados quando fixo excede capacidade</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 12, marginBottom: 24 }}>
+                {[{ n: "2", l: "Heads", c: "#8b5cf6" }, { n: String(revs.length), l: "Revisores", c: "#f59e0b" }, { n: String(eds.length + simExtraEd), l: "Editores Fixos", c: "#3b82f6" }, { n: String(freelasD), l: "Freelas Disp.", c: "#10b981" }].map((c, i) => (
+                  <div key={i} style={{ background: `${c.c}11`, border: `1px solid ${c.c}44`, borderRadius: 12, padding: 16, textAlign: "center" }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: c.c }}>{c.n}</div><div style={{ fontSize: 12, color: "#94a3b8" }}>{c.l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <Bar label="Camada 1 — Time Fixo" pct={ly.fp} color={ly.fp <= 90 ? "#10b981" : ly.fp <= 100 ? "#f59e0b" : "#ef4444"} cap={fixoCap} used={Math.min(simDem.mins, fixoCap)} icon="🏢" />
+                {ly.fp > 100 ? <Bar label={`Camada 2 — Freelas (${ly.fu}/${freelasD})`} pct={ly.fpp} color={ly.fpp <= 100 ? "#f97316" : "#ef4444"} cap={Math.round(fTot)} used={Math.round(Math.min(ly.ov, fTot))} icon="👥" />
+                  : <div style={{ padding: "10px 14px", background: "#10b98115", borderRadius: 8, marginBottom: 16 }}><span style={{ fontSize: 12, color: "#10b981" }}>👥 Freelas em standby</span></div>}
+              </div>
+              <div style={{ padding: 14, borderRadius: 12, background: `${ly.sc}11`, border: `2px solid ${ly.sc}44` }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: ly.sc }}>{ly.st === "ok" ? "✅" : ly.st === "warn" ? "⚠️" : ly.st === "fr" ? "🟠" : "🚨"} {ly.sl}</span>
+              </div>
+            </div>
+          )}
+
+          {/* ===== PESOS ===== */}
+          {tab === "pesos" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Pesos por Conteúdo</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Cada formato tem um peso em pontos. Meta diária: {BONUS_CONFIG.metaDiaria} pts · TURBO: {BONUS_CONFIG.turboThreshold}+ pts</p>
+
+              {/* Card explicativo */}
+              <div style={{ background: "linear-gradient(135deg, #172554, #1e3a5f)", borderRadius: 14, padding: 20, marginBottom: 20, border: "1px solid #3b82f644" }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#60a5fa", marginBottom: 12 }}>📐 Como funciona: Peso = Pontos</h3>
+                <div style={{ fontSize: 13, color: "#93c5fd", lineHeight: 1.8, marginBottom: 12 }}>
+                  Cada criativo editado vale seus <strong>pontos</strong> diretamente: <code style={{ background: "#0f172a", padding: "2px 8px", borderRadius: 4, color: "#fbbf24" }}>1 criativo = peso em pontos</code>. Meta mínima diária: <strong style={{ color: "#3b82f6" }}>{BONUS_CONFIG.metaDiaria} pts</strong>. TURBO: <strong style={{ color: "#f97316" }}>{BONUS_CONFIG.turboThreshold}+ pts</strong> no dia = R$ {BONUS_CONFIG.turbo.value}.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10 }}>
+                  {[
+                    { peso: 1, ex: "BBB, Symphony, CLP", c: "#ffe600" },
+                    { peso: 2, ex: "TTCX, Governo", c: "#00f2ea" },
+                    { peso: 4, ex: "Motion Graphics", c: "#a855f7" },
+                    { peso: 5, ex: "Long Form", c: "#ef4444" },
+                  ].map((item, i) => (
+                    <div key={i} style={{ background: "#0f172a", borderRadius: 10, padding: 12, textAlign: "center", border: "1px solid #334155" }}>
+                      <div style={{ fontSize: 24, fontWeight: 800, color: item.c }}>{item.peso}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8" }}>{item.peso === 1 ? "ponto" : "pontos"}</div>
+                      <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>{item.ex}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {FORMATS.map(f => (
+                  <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: 16, background: "#0f172a", borderRadius: 12, borderLeft: `4px solid ${f.color}` }}>
+                    <div style={{ minWidth: 70, textAlign: "center" }}>
+                      <div style={{ fontSize: 28, fontWeight: 800, color: f.color }}>{f.weight}</div>
+                      <div style={{ fontSize: 10, color: "#64748b" }}>{f.weight === 1 ? "ponto" : "pontos"}</div>
+                    </div>
+                    <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 14 }}>{f.name}</div><div style={{ fontSize: 12, color: "#94a3b8" }}>{f.desc}</div><div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>⏱️ ~{f.timeMin}min · {f.complexity} · {f.weight} pt{f.weight > 1 ? "s" : ""}/criativo</div></div>
+                    <div style={{ background: `${f.color}22`, color: f.color, padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600 }}>{f.weight === 1 ? "Leve" : f.weight === 2 ? "Médio" : "Pesado"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== CONTAGEM ===== */}
+          {tab === "contagem" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Contagem de Pontos</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Pontos por editor — ranking e bônus · Meta: {BONUS_CONFIG.metaDiaria} pts/dia · TURBO: {BONUS_CONFIG.turboThreshold}+ pts</p>
+
+              {/* Seção 1 — Entrada de Dados */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>📥 Entrada de Dados</h3>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+                  <div>
+                    <label style={{ fontSize: 12, color: "#94a3b8", display: "block", marginBottom: 4 }}>Mês</label>
+                    <input type="month" value={contagemMonth} onChange={e => setContagemMonth(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", fontSize: 13 }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, color: "#94a3b8", display: "block", marginBottom: 4 }}>Modo</label>
+                    <div style={{ display: "flex", borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
+                      {["manual", "json"].map(m => (
+                        <button key={m} onClick={() => setContagemMode(m)} style={{ padding: "8px 16px", background: contagemMode === m ? "#3b82f6" : "#1e293b", color: contagemMode === m ? "#fff" : "#94a3b8", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>{m === "manual" ? "Manual" : "Importar JSON"}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {contagemMode === "manual" ? (
+                  <div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid #334155" }}>
+                            <th style={{ textAlign: "left", padding: 8, color: "#94a3b8", minWidth: 100 }}>Editor</th>
+                            {activeFormats.map(f => (
+                              <th key={f.id} style={{ textAlign: "center", padding: 8, color: f.color, minWidth: 70 }}>
+                                <div>{f.name.split(" ")[0]}</div>
+                                <div style={{ fontSize: 10, color: "#64748b" }}>{f.weight} pt{f.weight > 1 ? "s" : ""}</div>
+                              </th>
+                            ))}
+                            <th style={{ textAlign: "center", padding: 8, color: "#10b981", minWidth: 80 }}>Total Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {editorsOnly.map(p => {
+                            let total = 0;
+                            activeFormats.forEach(f => { total += (manualData[p.id]?.[f.id] || 0) * f.weight; });
+                            return (
+                              <tr key={p.id} style={{ borderBottom: "1px solid #1e293b" }}>
+                                <td style={{ padding: 8, fontWeight: 600 }}>
+                                  <span style={{ color: p.color }}>{p.short}</span>
+                                  <span style={{ fontSize: 10, color: "#64748b", marginLeft: 6 }}>{p.role}</span>
+                                </td>
+                                {activeFormats.map(f => (
+                                  <td key={f.id} style={{ textAlign: "center", padding: 4 }}>
+                                    <input type="number" min="0" value={manualData[p.id]?.[f.id] || 0}
+                                      onChange={e => { const v = parseInt(e.target.value) || 0; setManualData(prev => ({ ...prev, [p.id]: { ...prev[p.id], [f.id]: v } })); }}
+                                      style={{ width: 56, padding: "4px 6px", borderRadius: 6, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", textAlign: "center", fontSize: 13 }} />
+                                  </td>
+                                ))}
+                                <td style={{ textAlign: "center", padding: 8, fontWeight: 800, fontSize: 16, color: "#10b981" }}>{total.toFixed(1)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Freela section */}
+                    <div style={{ marginTop: 16, padding: 14, background: "#1e293b", borderRadius: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <h4 style={{ fontSize: 13, fontWeight: 600, color: "#f97316" }}>👥 Freelas</h4>
+                        <button onClick={() => setFreelaData(prev => [...prev, { name: `Freela ${prev.length + 1}`, formats: {} }])} style={{ padding: "4px 12px", borderRadius: 6, background: "#f9731622", color: "#f97316", border: "1px solid #f9731644", fontSize: 12, cursor: "pointer" }}>+ Freela</button>
+                      </div>
+                      {freelaData.map((fl, idx) => (
+                        <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+                          <input value={fl.name} onChange={e => { const u = [...freelaData]; u[idx] = { ...u[idx], name: e.target.value }; setFreelaData(u); }}
+                            style={{ width: 100, padding: "4px 8px", borderRadius: 6, background: "#0f172a", color: "#e2e8f0", border: "1px solid #334155", fontSize: 12 }} />
+                          {activeFormats.map(f => (
+                            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                              <span style={{ fontSize: 9, color: f.color }}>{f.name.split(" ")[0].substring(0, 3)}</span>
+                              <input type="number" min="0" value={fl.formats?.[f.id] || 0}
+                                onChange={e => { const v = parseInt(e.target.value) || 0; const u = [...freelaData]; u[idx] = { ...u[idx], formats: { ...u[idx].formats, [f.id]: v } }; setFreelaData(u); }}
+                                style={{ width: 44, padding: "3px 4px", borderRadius: 4, background: "#0f172a", color: "#e2e8f0", border: "1px solid #334155", textAlign: "center", fontSize: 11 }} />
+                            </div>
+                          ))}
+                          <button onClick={() => setFreelaData(freelaData.filter((_, i) => i !== idx))} style={{ padding: "3px 8px", borderRadius: 4, background: "#7f1d1d", color: "#fca5a5", border: "none", fontSize: 11, cursor: "pointer" }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Cole o JSON gerado por <code style={{ background: "#0f172a", padding: "1px 6px", borderRadius: 4 }}>scripts/clickup-video-counter.js</code> ou importe o arquivo:</p>
+                    <textarea id="jsonInput" rows={6} placeholder='{"metadata": {...}, "editors": [...]}' style={{ width: "100%", padding: 12, borderRadius: 8, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", fontSize: 12, fontFamily: "monospace", resize: "vertical" }} />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button onClick={() => handleJsonImport(document.getElementById("jsonInput").value)} style={{ padding: "8px 16px", borderRadius: 8, background: "#3b82f6", color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Carregar</button>
+                      <label style={{ padding: "8px 16px", borderRadius: 8, background: "#1e293b", color: "#94a3b8", border: "1px solid #334155", fontSize: 13, cursor: "pointer" }}>
+                        📁 Importar arquivo
+                        <input type="file" accept=".json" style={{ display: "none" }} onChange={e => {
+                          const file = e.target.files[0]; if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = ev => { document.getElementById("jsonInput").value = ev.target.result; handleJsonImport(ev.target.result); };
+                          reader.readAsText(file);
+                        }} />
+                      </label>
+                    </div>
+                    {importedData && <div style={{ marginTop: 10, padding: 8, background: "#10b98122", borderRadius: 8, fontSize: 12, color: "#10b981" }}>JSON carregado com {importedData.fixed.length + importedData.freelas.length} editores</div>}
+                  </div>
+                )}
+              </div>
+
+              {/* Seção 2 — Tabela de Contagem Ponderada */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>📊 Pontos por Editor — Time Fixo</h3>
+                <p style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>Mês: {contagemData.month}</p>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "2px solid #334155" }}>
+                        <th style={{ textAlign: "left", padding: 10, color: "#94a3b8" }}>Editor</th>
+                        {activeFormats.map(f => (
+                          <th key={f.id} style={{ textAlign: "center", padding: 10, color: f.color }}>
+                            <div>{f.name.split(" ")[0]}</div>
+                            <div style={{ fontSize: 10, color: "#64748b" }}>({f.weight} pt{f.weight > 1 ? "s" : ""})</div>
+                          </th>
+                        ))}
+                        <th style={{ textAlign: "center", padding: 10, color: "#10b981" }}>Total Pts</th>
+                        <th style={{ textAlign: "center", padding: 10, color: "#fbbf24" }}>Rank</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {contagemData.fixed.map((e, i) => (
+                        <tr key={e.id || i} style={{ borderBottom: "1px solid #1e293b", background: e.rank <= 2 ? `${e.rank === 1 ? "#fbbf24" : "#94a3b8"}08` : "transparent" }}>
+                          <td style={{ padding: 10, fontWeight: 600 }}>{e.short || e.name}</td>
+                          {activeFormats.map(f => {
+                            const d = e.formats?.[f.id];
+                            return (
+                              <td key={f.id} style={{ textAlign: "center", padding: 10 }}>
+                                {d && d.count > 0 ? (
+                                  <div>
+                                    <span style={{ color: "#94a3b8" }}>{d.count}</span>
+                                    <span style={{ color: "#475569" }}> → </span>
+                                    <span style={{ color: "#10b981", fontWeight: 600 }}>{d.pontos}</span>
+                                  </div>
+                                ) : <span style={{ color: "#334155" }}>—</span>}
+                              </td>
+                            );
+                          })}
+                          <td style={{ textAlign: "center", padding: 10, fontWeight: 800, fontSize: 16, color: "#10b981" }}>{e.totals.pontos}</td>
+                          <td style={{ textAlign: "center", padding: 10, fontSize: 18 }}>{e.rank === 1 ? "🥇" : e.rank === 2 ? "🥈" : e.rank === 3 ? "🥉" : `${e.rank}º`}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Freelas table */}
+                {contagemData.freelas.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <h4 style={{ fontSize: 13, fontWeight: 600, color: "#f97316", marginBottom: 8 }}>👥 Freelas</h4>
+                    <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid #334155" }}>
+                          <th style={{ textAlign: "left", padding: 8, color: "#94a3b8" }}>Nome</th>
+                          {activeFormats.map(f => <th key={f.id} style={{ textAlign: "center", padding: 8, color: f.color, fontSize: 11 }}>{f.name.split(" ")[0]}</th>)}
+                          <th style={{ textAlign: "center", padding: 8, color: "#10b981" }}>Total Pts</th>
+                          <th style={{ textAlign: "center", padding: 8, color: "#f97316" }}>Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contagemData.freelas.map((e, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid #1e293b" }}>
+                            <td style={{ padding: 8, fontWeight: 600, color: "#f97316" }}>{e.short || e.name}</td>
+                            {activeFormats.map(f => {
+                              const d = e.formats?.[f.id];
+                              return <td key={f.id} style={{ textAlign: "center", padding: 8 }}>{d && d.count > 0 ? <span style={{ color: "#10b981" }}>{d.pontos}</span> : <span style={{ color: "#334155" }}>—</span>}</td>;
+                            })}
+                            <td style={{ textAlign: "center", padding: 8, fontWeight: 700, color: "#10b981" }}>{e.totals.pontos}</td>
+                            <td style={{ textAlign: "center", padding: 8, fontWeight: 700, color: "#f97316" }}>R$ {e.bonus?.freelaTotal?.toFixed(2) || "0.00"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Seção 3 — Ranking & Bônus */}
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: "#fbbf24" }}>🏆 Ranking & Bônus — Time Fixo</h3>
+
+                {/* Pódio */}
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-end", gap: 12, marginBottom: 24, padding: "0 20px" }}>
+                  {[2, 1, 3].map(rank => {
+                    const editor = contagemData.fixed.find(e => e.rank === rank);
+                    if (!editor) return null;
+                    const heights = { 1: 140, 2: 110, 3: 80 };
+                    const colors = { 1: "#fbbf24", 2: "#94a3b8", 3: "#cd7f32" };
+                    const medals = { 1: "🥇", 2: "🥈", 3: "🥉" };
+                    const bonusVal = rank === 1 ? 500 : rank === 2 ? 250 : 0;
+                    return (
+                      <div key={rank} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, maxWidth: 160 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: colors[rank], marginBottom: 4 }}>{editor.short || editor.name}</div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#10b981", marginBottom: 4 }}>{editor.totals.pontos} pts</div>
+                        <div style={{ width: "100%", height: heights[rank], background: `linear-gradient(180deg, ${colors[rank]}33, ${colors[rank]}11)`, borderRadius: "10px 10px 0 0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: `1px solid ${colors[rank]}44`, borderBottom: "none" }}>
+                          <div style={{ fontSize: 32 }}>{medals[rank]}</div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: colors[rank] }}>{rank}º</div>
+                          {bonusVal > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: "#10b981", marginTop: 4 }}>R$ {bonusVal}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Breakdown */}
+                <div style={{ display: "grid", gap: 8 }}>
+                  {contagemData.fixed.map((e, i) => (
+                    <div key={e.id || i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#1e293b", borderRadius: 10, borderLeft: `4px solid ${e.rank === 1 ? "#fbbf24" : e.rank === 2 ? "#94a3b8" : e.rank === 3 ? "#cd7f32" : "#475569"}` }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{e.rank === 1 ? "🥇" : e.rank === 2 ? "🥈" : e.rank === 3 ? "🥉" : `${e.rank}º`} {e.short || e.name}</div>
+                        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{e.totals.pontos} pontos · {e.totals.raw_count} criativos</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        {e.bonus?.productivity > 0 && <div style={{ fontSize: 12, color: "#10b981" }}>Produtividade: R$ {e.bonus.productivity}</div>}
+                        {e.bonus?.turbo > 0 && <div style={{ fontSize: 12, color: "#f97316" }}>Turbo: R$ {e.bonus.turbo}</div>}
+                        {e.bonus?.turbinho > 0 && <div style={{ fontSize: 12, color: "#10b981" }}>Turbinho: R$ {e.bonus.turbinho} ({e.bonus.turbinho_count}x)</div>}
+                        {e.bonus?.fds > 0 && <div style={{ fontSize: 12, color: "#fbbf24" }}>FDS: R$ {e.bonus.fds}</div>}
+                        <div style={{ fontSize: 16, fontWeight: 800, color: e.bonus?.total > 0 ? "#10b981" : "#475569" }}>R$ {e.bonus?.total || 0}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Card de Resumo */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10 }}>
+                {(() => {
+                  const totalPts = contagemData.fixed.reduce((a, e) => a + e.totals.pontos, 0);
+                  const avgPts = contagemData.fixed.length > 0 ? Math.round(totalPts / contagemData.fixed.length * 10) / 10 : 0;
+                  const totalBonus = contagemData.fixed.reduce((a, e) => a + (e.bonus?.total || 0), 0);
+                  const totalTurbinho = contagemData.fixed.reduce((a, e) => a + (e.bonus?.turbinho || 0), 0);
+                  const totalFds = contagemData.fixed.reduce((a, e) => a + (e.bonus?.fds || 0), 0);
+                  const totalFreela = contagemData.freelas.reduce((a, e) => a + (e.bonus?.freelaTotal || 0), 0);
+                  const cards = [
+                    { n: totalPts, l: "Total Pontos", c: "#10b981" },
+                    { n: avgPts, l: "Média por Editor", c: "#3b82f6" },
+                    { n: `R$ ${totalBonus}`, l: "Bônus Total Fixo", c: "#fbbf24" },
+                  ];
+                  if (totalTurbinho > 0) cards.push({ n: `R$ ${totalTurbinho}`, l: "Turbinho", c: "#10b981" });
+                  if (totalFds > 0) cards.push({ n: `R$ ${totalFds}`, l: "FDS/Feriado", c: "#fbbf24" });
+                  cards.push({ n: `R$ ${totalFreela.toFixed(2)}`, l: "Custo Freelas", c: "#f97316" });
+                  return cards;
+                })().map((c, i) => (
+                  <div key={i} style={{ background: `${c.c}11`, border: `1px solid ${c.c}33`, borderRadius: 10, padding: 14, textAlign: "center" }}>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: c.c }}>{c.n}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8" }}>{c.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Instruções Dashboard ClickUp */}
+              <div style={{ marginTop: 16, background: "#172554", borderRadius: 12, padding: 16, border: "1px solid #3b82f644" }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: "#60a5fa", marginBottom: 8 }}>📌 Integração com Dashboard ClickUp</h4>
+                <div style={{ fontSize: 12, color: "#93c5fd", lineHeight: 1.8 }}>
+                  <strong>1.</strong> Google Apps Script roda 2x/dia automaticamente, puxa dados do ClickUp via campo "Primeira Edição" e "Pontos"<br />
+                  <strong>2.</strong> Widget separado (<code style={{ background: "#0f172a", padding: "1px 6px", borderRadius: 4 }}>widget-contagem.html</code>) consome o JSON do GAS via <code style={{ background: "#0f172a", padding: "1px 6px", borderRadius: 4 }}>doGet()</code><br />
+                  <strong>3.</strong> No Dashboard ClickUp: adicionar widget "Custom Embed" apontando para o widget hospedado<br />
+                  <strong>4.</strong> Alternativa manual: rode <code style={{ background: "#0f172a", padding: "1px 6px", borderRadius: 4 }}>node scripts/clickup-video-counter.js --month {contagemMonth}</code> e importe o JSON acima<br />
+                  <strong>Nota:</strong> Turbinho (✨) e FDS (📅) só aparecem ao importar JSON do script — requerem dados do ClickUp (status history e tags)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===== BONIFICAÇÃO ===== */}
+          {tab === "bonus" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Bonificação</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Produtividade + Turbo + FDS + Qualidade</p>
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "#fbbf24" }}>🏆 Produtividade Mensal</h3>
+                {BONUS_CONFIG.productivity.map(b => (
+                  <div key={b.rank} style={{ display: "flex", justifyContent: "space-between", padding: "12px 16px", background: "#1e293b", borderRadius: 10, marginBottom: 8 }}>
+                    <div><div style={{ fontWeight: 600 }}>{b.label}</div><div style={{ fontSize: 12, color: "#94a3b8" }}>{b.desc}</div></div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#10b981" }}>R$ {b.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: "#f97316" }}>⚡ TURBO + ✨ Turbinho + 📅 FDS</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10 }}>
+                  {[
+                    { l: "TURBO", v: `R$ ${BONUS_CONFIG.turbo.value}/dia`, c: "#f97316", desc: `>${BONUS_CONFIG.turboThreshold} pontos no dia` },
+                    { l: "Turbinho", v: `R$ ${BONUS_CONFIG.turbinho.value}/criativo`, c: "#10b981", desc: "Aprovado sem ajuste" },
+                    { l: "FDS/Feriado", v: `R$ ${BONUS_CONFIG.fds.perPonto}/ponto`, c: "#fbbf24", desc: 'Tag "fds edição" ou "feriado edição"' },
+                    { l: "Freela", v: `R$ ${BONUS_CONFIG.freelaPerPonto}/ponto`, c: "#a855f7", desc: "Por ponto entregue" },
+                  ].map((x, i) => (
+                    <div key={i} style={{ padding: 16, background: "#1e293b", borderRadius: 10, textAlign: "center" }}>
+                      <div style={{ fontSize: 10, color: "#94a3b8", marginBottom: 4 }}>{x.l}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: x.c }}>{x.v}</div>
+                      <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>{x.desc}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                  <div style={{ padding: 12, background: "#f9731611", borderRadius: 8, border: "1px solid #f9731633" }}>
+                    <div style={{ fontSize: 12, color: "#f97316", fontWeight: 600 }}>⚡ TURBO</div>
+                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>R$ {BONUS_CONFIG.turbo.value} no dia em que o editor ultrapassa <strong style={{ color: "#f97316" }}>{BONUS_CONFIG.turboThreshold} pontos</strong>. Calculado via campo "Primeira Edição".</div>
+                  </div>
+                  <div style={{ padding: 12, background: "#10b98111", borderRadius: 8, border: "1px solid #10b98133" }}>
+                    <div style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>✨ Turbinho</div>
+                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>R$ {BONUS_CONFIG.turbinho.value} por criativo que foi aprovado <strong style={{ color: "#10b981" }}>sem passar por "Para Ajustar" nem "Para Ajustar Cliente"</strong>. Incentiva qualidade na primeira entrega.</div>
+                  </div>
+                  <div style={{ padding: 12, background: "#fbbf2411", borderRadius: 8, border: "1px solid #fbbf2433" }}>
+                    <div style={{ fontSize: 12, color: "#fbbf24", fontWeight: 600 }}>📅 FDS/Feriado</div>
+                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>R$ {BONUS_CONFIG.fds.perPonto} × pontos do criativo. Ativado quando a task tem tag <strong style={{ color: "#fbbf24" }}>"fds edição"</strong> ou <strong style={{ color: "#fbbf24" }}>"feriado edição"</strong>. Válido pós-BBB.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===== REMUNERAÇÃO ===== */}
+          {tab === "remuneracao" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Remuneração</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Valores base + política de reajuste</p>
+              <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
+                {SALARY_TABLE.map((s, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, background: "#0f172a", borderRadius: 12, borderLeft: `4px solid ${s.type === "novo" ? "#3b82f6" : s.type === "antigo" ? "#10b981" : "#f59e0b"}` }}>
+                    <div><div style={{ fontWeight: 600, fontSize: 14 }}>{s.label}</div><div style={{ fontSize: 11, color: "#64748b" }}>{s.type === "novo" ? "🆕 Entrada" : s.type === "antigo" ? "✅ Pós-reajuste" : "📅 Temporário"}</div></div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: s.type === "antigo" ? "#10b981" : "#e2e8f0" }}>R$ {s.value.toLocaleString("pt-BR")}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>📈 Política de Reajuste</h3>
+                {[{ t: "Inflação (IPCA)", d: "Anual, todos os contratos", c: "#f59e0b" }, { t: "Tempo de casa", d: "+R$150~200 a cada 12 meses (PJ)", c: "#10b981" }, { t: "Promoção", d: "Editor→Revisor: aumento de faixa", c: "#8b5cf6" }].map((r, i) => (
+                  <div key={i} style={{ padding: 12, background: "#1e293b", borderRadius: 10, marginBottom: 8 }}>
+                    <span style={{ fontWeight: 600, color: r.c }}>{r.t}</span> — <span style={{ fontSize: 12, color: "#94a3b8" }}>{r.d}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ===== SIMULADOR ===== */}
+          {tab === "simulador" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Simulador</h2>
+              <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>Monte cenário e veja qual camada absorve</p>
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Demanda Diária</h3>
+                {simProjects.map((p, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                    <select value={p.formatId} onChange={e => { const u = [...simProjects]; u[i] = { ...u[i], formatId: e.target.value }; setSimProjects(u); }} style={{ flex: 1, padding: 8, borderRadius: 8, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", fontSize: 13 }}>
+                      {FORMATS.map(f => <option key={f.id} value={f.id}>{f.name} (×{f.weight})</option>)}
+                    </select>
+                    <input type="number" value={p.qty} onChange={e => { const u = [...simProjects]; u[i] = { ...u[i], qty: parseInt(e.target.value) || 0 }; setSimProjects(u); }} style={{ width: 70, padding: 8, borderRadius: 8, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", textAlign: "center" }} />
+                    <button onClick={() => setSimProjects(simProjects.filter((_, j) => j !== i))} style={{ padding: "6px 10px", borderRadius: 8, background: "#7f1d1d", color: "#fca5a5", border: "none", fontSize: 12, cursor: "pointer" }}>✕</button>
+                  </div>
+                ))}
+                <button onClick={() => setSimProjects([...simProjects, { formatId: "bbb", qty: 5 }])} style={{ padding: "8px 16px", borderRadius: 8, background: "#1e40af", color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>+ Adicionar</button>
+              </div>
+              <div style={{ background: "#0f172a", borderRadius: 12, padding: 20, marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <div><label style={{ fontSize: 12, color: "#94a3b8" }}>Editores extras</label><input type="number" value={simExtraEd} onChange={e => setSimExtraEd(parseInt(e.target.value) || 0)} style={{ width: "100%", padding: 10, borderRadius: 8, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", marginTop: 4 }} min="0" /></div>
+                  <div><label style={{ fontSize: 12, color: "#94a3b8" }}>Freelas disp.</label><input type="number" value={freelasD} onChange={e => setFreelasD(parseInt(e.target.value) || 0)} style={{ width: "100%", padding: 10, borderRadius: 8, background: "#1e293b", color: "#e2e8f0", border: "1px solid #334155", marginTop: 4 }} min="0" /></div>
+                </div>
+              </div>
+              <div style={{ background: `${ly.sc}08`, border: `2px solid ${ly.sc}44`, borderRadius: 12, padding: 20 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: ly.sc, marginBottom: 16 }}>{ly.st === "ok" ? "✅" : ly.st === "warn" ? "⚠️" : ly.st === "fr" ? "🟠" : "🚨"} {ly.sl}</h3>
+                <Bar label="Camada 1" pct={ly.fp} color={ly.fp <= 90 ? "#10b981" : ly.fp <= 100 ? "#f59e0b" : "#ef4444"} cap={fixoCap} used={Math.min(simDem.mins, fixoCap)} icon="🏢" />
+                {ly.ov > 0 && <Bar label={`Camada 2 (${ly.fu} freelas)`} pct={ly.fpp} color={ly.fpp <= 100 ? "#f97316" : "#ef4444"} cap={Math.round(fTot)} used={Math.round(Math.min(ly.ov, fTot))} icon="👥" />}
+              </div>
+            </div>
+          )}
+
+          {/* ===== TIME ===== */}
+          {tab === "time" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Time</h2>
+              <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
+                {PEOPLE.map(m => {
+                  const rc = m.color;
+                  const rl = m.role === "head" ? "Head" : m.role === "revisor" ? "Revisor" : "Editor";
+                  return (
+                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 14, background: "#0f172a", borderRadius: 10, borderLeft: `4px solid ${rc}` }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${rc}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: rc }}>{m.id}</div>
+                        <div><div style={{ fontWeight: 600, fontSize: 14 }}>{m.name}</div><div style={{ fontSize: 11, color: "#64748b" }}>{rl} · {m.tenure}</div></div>
+                      </div>
+                      {m.salary ? <div style={{ fontWeight: 700, fontSize: 16, color: "#10b981" }}>R$ {m.salary.toLocaleString("pt-BR")}</div> : <span style={{ fontSize: 12, color: "#64748b" }}>—</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 16, padding: 14, background: "#172554", borderRadius: 10, fontSize: 13, color: "#93c5fd" }}>
+                Custo fixo (sem heads): <strong>R$ {PEOPLE.filter(m => m.salary).reduce((a, m) => a + m.salary, 0).toLocaleString("pt-BR")}</strong>/mês
+              </div>
+            </div>
+          )}
+
+          {/* ===== MATRIZ ===== */}
+          {tab === "matriz" && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Matriz Formato × Cargo</h2>
+              <div style={{ overflowX: "auto", marginTop: 16 }}>
+                <table style={{ width: "100%", fontSize: 13 }}>
+                  <thead><tr style={{ borderBottom: "1px solid #334155" }}>
+                    <th style={{ textAlign: "left", padding: 10, color: "#94a3b8" }}>Formato</th>
+                    {ROLES_DEF.map(r => <th key={r.id} style={{ textAlign: "center", padding: 10 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: r.color, marginRight: 6 }} />{r.name}</th>)}
+                  </tr></thead>
+                  <tbody>{FORMATS.map(f => (
+                    <tr key={f.id} style={{ borderBottom: "1px solid #1e293b" }}>
+                      <td style={{ padding: 10 }}><span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: f.color, marginRight: 8 }} />{f.name} <span style={{ fontSize: 11, color: "#64748b" }}>(×{f.weight})</span></td>
+                      {ROLES_DEF.map(r => <td key={r.id} style={{ textAlign: "center", padding: 10 }}>{r.canWork.includes(f.id) ? <span style={{ color: "#10b981", fontWeight: 700, fontSize: 16 }}>✓</span> : <span style={{ color: "#334155" }}>—</span>}</td>)}
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+        </div>
+        <div style={{ textAlign: "center", fontSize: 11, color: "#475569", marginTop: 20 }}>AllFluence — v2.0</div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

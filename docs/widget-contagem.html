@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AllFluence — Contagem de Pontos</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 16px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .stat { background: #0f172a; border-radius: 10px; padding: 12px; text-align: center; border: 1px solid #334155; }
+  .stat-value { font-size: 22px; font-weight: 800; }
+  .stat-label { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+  .podium { display: flex; justify-content: center; align-items: flex-end; gap: 8px; margin: 16px 0; }
+  .podium-item { display: flex; flex-direction: column; align-items: center; flex: 1; max-width: 140px; }
+  .podium-bar { width: 100%; border-radius: 8px 8px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: none; }
+  table { width: 100%; font-size: 12px; border-collapse: collapse; }
+  th { text-align: center; padding: 8px; color: #94a3b8; border-bottom: 1px solid #334155; }
+  th:first-child { text-align: left; }
+  td { padding: 8px; text-align: center; border-bottom: 1px solid #1e293b; }
+  td:first-child { text-align: left; font-weight: 600; }
+  .turbo-badge { display: inline-block; background: #f9731622; color: #f97316; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .turbinho-badge { display: inline-block; background: #10b98122; color: #10b981; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .fds-badge { display: inline-block; background: #fbbf2422; color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  .loading { text-align: center; padding: 40px; color: #64748b; }
+  .error { text-align: center; padding: 20px; color: #ef4444; background: #7f1d1d22; border-radius: 8px; }
+  .meta { font-size: 11px; color: #64748b; text-align: center; margin-top: 8px; }
+  h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .subtitle { font-size: 12px; color: #94a3b8; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="loading" id="loading">Carregando dados...</div>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+// Replace with your Google Apps Script Web App URL after deploying
+const GAS_URL = '';
+const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
+const META_DIARIA = 6;
+const TURBO_THRESHOLD = 8;
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+
+function render(data) {
+  const app = document.getElementById('app');
+
+  if (!data || !data.editors || data.editors.length === 0) {
+    app.innerHTML = '<div class="error">Nenhum dado encontrado para este periodo.</div>';
+    return;
+  }
+
+  const fixed = data.editors.filter(e => e.team !== 'freela').sort((a, b) => (a.rank || 99) - (b.rank || 99));
+  const freelas = data.editors.filter(e => e.team === 'freela');
+  const totalPontos = data.summary?.total_pontos || fixed.reduce((a, e) => a + e.totals.pontos, 0);
+  const totalEditors = fixed.length;
+  const avgPontos = totalEditors > 0 ? Math.round(totalPontos / totalEditors * 10) / 10 : 0;
+  const totalBonus = fixed.reduce((a, e) => a + (e.bonus?.total || 0), 0);
+  const metaDiaria = data.metadata?.meta_diaria || META_DIARIA;
+  const turboThreshold = data.metadata?.turbo_threshold || TURBO_THRESHOLD;
+
+  let html = '';
+
+  // Header
+  html += '<div style="margin-bottom: 12px">';
+  html += '<h2>Contagem de Pontos</h2>';
+  html += '<div class="subtitle">Mes: ' + (data.metadata?.month || '—') + ' &middot; Meta: ' + metaDiaria + ' pts/dia &middot; TURBO: ' + turboThreshold + '+ pts</div>';
+  html += '</div>';
+
+  // Stats
+  const totalTurbinho = fixed.reduce((a, e) => a + (e.bonus?.turbinho || 0), 0);
+  const totalFds = fixed.reduce((a, e) => a + (e.bonus?.fds || 0), 0);
+  html += '<div class="stats">';
+  html += statCard(totalPontos, 'Total Pontos', '#10b981');
+  html += statCard(avgPontos, 'Media/Editor', '#3b82f6');
+  html += statCard('R$ ' + totalBonus, 'Bonus Total', '#fbbf24');
+  if (totalTurbinho > 0) html += statCard('R$ ' + totalTurbinho, 'Turbinho', '#10b981');
+  if (totalFds > 0) html += statCard('R$ ' + totalFds, 'FDS/Feriado', '#fbbf24');
+  if (freelas.length > 0) {
+    const freelaCost = freelas.reduce((a, e) => a + (e.bonus?.freelaTotal || 0), 0);
+    html += statCard('R$ ' + freelaCost.toFixed(0), 'Custo Freelas', '#f97316');
+  }
+  html += '</div>';
+
+  // Podium (top 3)
+  if (fixed.length >= 2) {
+    html += '<div class="card">';
+    html += '<h3 style="color: #fbbf24; text-align: center">Ranking</h3>';
+    html += '<div class="podium">';
+    const podiumOrder = [2, 1, 3];
+    const heights = { 1: 120, 2: 90, 3: 65 };
+    const colors = { 1: '#fbbf24', 2: '#94a3b8', 3: '#cd7f32' };
+    const medals = { 1: '&#x1F947;', 2: '&#x1F948;', 3: '&#x1F949;' };
+
+    podiumOrder.forEach(rank => {
+      const ed = fixed.find(e => e.rank === rank);
+      if (!ed) return;
+      const bonus = rank === 1 ? 500 : rank === 2 ? 250 : 0;
+      html += '<div class="podium-item">';
+      html += '<div style="font-size:12px;font-weight:700;color:' + colors[rank] + '">' + (ed.name.split(' ')[0]) + '</div>';
+      html += '<div style="font-size:14px;font-weight:800;color:#10b981;margin:2px 0">' + ed.totals.pontos + ' pts</div>';
+      html += '<div class="podium-bar" style="height:' + heights[rank] + 'px;background:linear-gradient(180deg,' + colors[rank] + '33,' + colors[rank] + '11);border:1px solid ' + colors[rank] + '44">';
+      html += '<div style="font-size:24px">' + medals[rank] + '</div>';
+      if (bonus > 0) html += '<div style="font-size:11px;font-weight:700;color:#10b981;margin-top:4px">R$ ' + bonus + '</div>';
+      html += '</div></div>';
+    });
+
+    html += '</div></div>';
+  }
+
+  // Ranking Table
+  html += '<div class="card">';
+  html += '<h3>Pontos — Time Fixo</h3>';
+  html += '<table><thead><tr>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>Turbinho</th><th>FDS</th><th>Bonus</th>';
+  html += '</tr></thead><tbody>';
+
+  fixed.forEach(e => {
+    const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : e.rank + 'o ';
+    const turboDays = e.bonus?.turbo_days || 0;
+    const turboHtml = turboDays > 0 ? '<span class="turbo-badge">&#x26A1;' + turboDays + 'd</span>' : '<span style="color:#334155">—</span>';
+    const turbinhoCount = e.bonus?.turbinho_count || 0;
+    const turbinhoHtml = turbinhoCount > 0 ? '<span class="turbinho-badge">&#x2728;' + turbinhoCount + '</span>' : '<span style="color:#334155">—</span>';
+    const fdsVal = e.bonus?.fds || 0;
+    const fdsHtml = fdsVal > 0 ? '<span class="fds-badge">&#x1F4C5;R$' + fdsVal + '</span>' : '<span style="color:#334155">—</span>';
+    const bonusTotal = e.bonus?.total || 0;
+
+    html += '<tr' + (e.rank <= 2 ? ' style="background:' + (e.rank === 1 ? '#fbbf2408' : '#94a3b808') + '"' : '') + '>';
+    html += '<td>' + medal + (e.name.split(' ')[0]) + '</td>';
+    html += '<td style="font-weight:800;color:#10b981">' + e.totals.pontos + '</td>';
+    html += '<td>' + turboHtml + '</td>';
+    html += '<td>' + turbinhoHtml + '</td>';
+    html += '<td>' + fdsHtml + '</td>';
+    html += '<td style="font-weight:700;color:' + (bonusTotal > 0 ? '#10b981' : '#475569') + '">R$ ' + bonusTotal + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  // Freelas
+  if (freelas.length > 0) {
+    html += '<div class="card">';
+    html += '<h3 style="color:#f97316">Freelas</h3>';
+    html += '<table><thead><tr>';
+    html += '<th style="text-align:left">Nome</th><th>Criativos</th><th>Pontos</th><th>Valor</th>';
+    html += '</tr></thead><tbody>';
+
+    freelas.forEach(e => {
+      html += '<tr>';
+      html += '<td style="color:#f97316">' + (e.name.split(' ')[0]) + '</td>';
+      html += '<td>' + e.totals.raw_count + '</td>';
+      html += '<td style="font-weight:700;color:#10b981">' + e.totals.pontos + '</td>';
+      html += '<td style="font-weight:700;color:#f97316">R$ ' + (e.bonus?.freelaTotal || 0).toFixed(0) + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+  }
+
+  // TURBO details
+  if (data.turbo_days && Object.keys(data.turbo_days).length > 0) {
+    html += '<div class="card" style="border:1px solid #f9731644">';
+    html += '<h3 style="color:#f97316">&#x26A1; Dias TURBO (>' + turboThreshold + ' pts)</h3>';
+
+    Object.values(data.turbo_days).forEach(td => {
+      html += '<div style="margin-bottom:8px">';
+      html += '<div style="font-weight:600;font-size:13px">' + td.name.split(' ')[0] + ' <span style="color:#f97316;font-size:11px">' + td.count + ' dia(s) = R$ ' + td.total_bonus + '</span></div>';
+      td.days.forEach(day => {
+        html += '<div style="font-size:11px;color:#94a3b8;margin-left:12px">' + day.date + ': <span style="color:#10b981;font-weight:600">' + day.pontos + ' pts</span></div>';
+      });
+      html += '</div>';
+    });
+
+    html += '</div>';
+  }
+
+  // Turbinho details
+  if (data.turbinho_summary && Object.keys(data.turbinho_summary).length > 0) {
+    html += '<div class="card" style="border:1px solid #10b98144">';
+    html += '<h3 style="color:#10b981">&#x2728; Turbinho (sem ajuste)</h3>';
+
+    Object.values(data.turbinho_summary).forEach(tb => {
+      var pct = tb.total_tasks > 0 ? Math.round(tb.sem_ajuste / tb.total_tasks * 100) : 0;
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b">';
+      html += '<div style="font-weight:600;font-size:12px">' + tb.name.split(' ')[0] + ' <span style="color:#64748b;font-size:11px">' + tb.sem_ajuste + '/' + tb.total_tasks + ' direto (' + pct + '%)</span></div>';
+      html += '<div style="font-weight:700;font-size:12px;color:#10b981">R$ ' + tb.bonus + '</div>';
+      html += '</div>';
+    });
+
+    html += '</div>';
+  }
+
+  // Meta
+  const cachedAt = data.metadata?.cached_at || data.metadata?.generated_at || '';
+  html += '<div class="meta">Atualizado: ' + (cachedAt ? new Date(cachedAt).toLocaleString('pt-BR') : '—') + '</div>';
+
+  app.innerHTML = html;
+}
+
+function statCard(value, label, color) {
+  return '<div class="stat"><div class="stat-value" style="color:' + color + '">' + value + '</div><div class="stat-label">' + label + '</div></div>';
+}
+
+// ─── Data Loading ────────────────────────────────────────────────────────────
+
+async function loadData() {
+  if (!GAS_URL) {
+    // No GAS URL configured — show setup instructions
+    document.getElementById('app').innerHTML =
+      '<div class="card">' +
+      '<h3>Setup necessario</h3>' +
+      '<div style="font-size:12px;color:#94a3b8;line-height:1.8">' +
+      '1. Deploy o <code style="background:#0f172a;padding:1px 6px;border-radius:4px">video-counter.gs</code> como Web App no Google Apps Script<br>' +
+      '2. Copie a URL do Web App<br>' +
+      '3. Cole na variavel <code style="background:#0f172a;padding:1px 6px;border-radius:4px">GAS_URL</code> no topo deste arquivo<br>' +
+      '4. Hospede este HTML (GitHub Pages, Netlify, etc.)<br>' +
+      '5. Adicione como widget Embed no Dashboard ClickUp' +
+      '</div></div>' +
+      '<div class="card">' +
+      '<h3>Teste com JSON local</h3>' +
+      '<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Cole o JSON do <code style="background:#0f172a;padding:1px 6px;border-radius:4px">clickup-video-counter.js</code>:</div>' +
+      '<textarea id="jsonTest" rows="4" style="width:100%;padding:8px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;font-size:11px;font-family:monospace;resize:vertical" placeholder=\'{"metadata":...}\'></textarea>' +
+      '<button onclick="testJson()" style="margin-top:6px;padding:6px 16px;border-radius:6px;background:#3b82f6;color:#fff;border:none;font-size:12px;cursor:pointer">Carregar</button>' +
+      '</div>';
+    return;
+  }
+
+  try {
+    const response = await fetch(GAS_URL);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+    render(data);
+  } catch (err) {
+    document.getElementById('app').innerHTML =
+      '<div class="error">Erro ao carregar dados: ' + err.message + '</div>';
+  }
+}
+
+function testJson() {
+  try {
+    const data = JSON.parse(document.getElementById('jsonTest').value);
+    render(data);
+  } catch (err) {
+    alert('JSON invalido: ' + err.message);
+  }
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+
+loadData();
+
+// Auto-refresh
+if (GAS_URL) {
+  setInterval(loadData, REFRESH_INTERVAL);
+}
+</script>
+
+</body>
+</html>
