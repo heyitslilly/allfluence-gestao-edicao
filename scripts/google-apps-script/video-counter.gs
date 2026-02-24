@@ -30,8 +30,8 @@ const CONFIG = {
     ],
     metaDiaria: 6, // meta mínima diária: 6 pontos
     turbo: { value: 100, threshold: 8 }, // TURBO: 8+ pontos/dia
-    turbinho: { value: 20 }, // R$20 por criativo sem ajuste
-    fds: { perPonto: 10, tags: ['fds edição', 'feriado edição'] },
+    turbinho: { value: 10 }, // R$10 por criativo sem ajuste
+    fds: { perTask: { 1: 35, 2: 50 }, tags: ['fds edição', 'feriado edição'] },
     ajusteStatuses: ['para ajustar', 'para ajustar cliente'],
     freelaPerPonto: 35,
   },
@@ -39,6 +39,19 @@ const CONFIG = {
   WEIGHT_MAP: {
     bbb: 1, symphony: 1, ttcx: 2, gov: 2, motion: 4, longform: 5, clp: 1,
   },
+  // Time fixo — apenas esses editores recebem TURBO e Turbinho
+  TIME_FIXO: [
+    'pedro ximenes', 'lílian elen', 'lilian elen',
+    'rafael nóbrega', 'rafael nobrega',
+    'bruna', 'vinícius', 'vinicius', 'daniel', 'ricardo',
+  ],
+  TIME_IA: ['rafael gomes'],
+  FREELAS: [
+    'bianca', 'ághata', 'agatha', 'maria eduarda',
+    'gabriel bonilha', 'raphael', 'saturno', 'gustavo', 'hugo',
+  ],
+  // Display name aliases (clickup username → display name)
+  NAME_ALIASES: { 'saturno': 'Raphael (Saturno)' },
   CLICKUP_API_BASE: 'https://api.clickup.com/api/v2',
   CACHE_KEY: 'VIDEO_COUNTER_RESULT',
 };
@@ -65,8 +78,15 @@ function clickupGet_(endpoint) {
   return JSON.parse(response.getContentText());
 }
 
-function getTasks_(listId, page) {
-  const data = clickupGet_(`/list/${listId}/task?page=${page}&archived=false&include_closed=true`);
+function getTasks_(listId, page, dateRange) {
+  let url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
+  if (dateRange) {
+    // Only fetch tasks updated within the month window (± 15 days buffer)
+    const buffer = 15 * 24 * 60 * 60 * 1000;
+    url += '&date_updated_gt=' + (dateRange.start - buffer);
+    url += '&date_updated_lt=' + (dateRange.end + buffer);
+  }
+  const data = clickupGet_(url);
   return data.tasks || [];
 }
 
@@ -239,7 +259,8 @@ function fetchAllTasks_(listId, dateRange) {
   let hasMore = true;
 
   while (hasMore) {
-    const tasks = getTasks_(listId, page);
+    const tasks = getTasks_(listId, page, dateRange);
+    Logger.log('  Page ' + page + ': ' + tasks.length + ' tasks');
     if (tasks.length === 0) { hasMore = false; break; }
 
     const filtered = tasks.filter(t => {
@@ -254,7 +275,7 @@ function fetchAllTasks_(listId, dateRange) {
     if (tasks.length < 100) hasMore = false;
 
     // GAS safety: avoid timeout on huge lists
-    if (page > 50) { hasMore = false; break; }
+    if (page > 20) { hasMore = false; break; }
   }
 
   return all;
@@ -285,7 +306,8 @@ function calculatePontos_(tasks) {
     const split = editors.length;
     editors.forEach(editor => {
       if (!editorMap[editor.id]) {
-        editorMap[editor.id] = { id: editor.id, name: editor.name, team: 'fixed', tasks_count: 0, pontos: 0, daily: {} };
+        var displayName = CONFIG.NAME_ALIASES[(editor.name || '').toLowerCase()] || editor.name;
+        editorMap[editor.id] = { id: editor.id, name: displayName, team: classifyTeam_(editor.name), tasks_count: 0, pontos: 0, daily: {} };
       }
       const ed = editorMap[editor.id];
       const pts = pontos / split;
@@ -299,11 +321,12 @@ function calculatePontos_(tasks) {
       if (!editorTaskIds[editor.id]) editorTaskIds[editor.id] = [];
       editorTaskIds[editor.id].push(task.id);
 
-      // Track FDS pontos
+      // Track FDS tasks by weight
       if (fds) {
-        if (!editorFds[editor.id]) editorFds[editor.id] = { pontos: 0, count: 0 };
-        editorFds[editor.id].pontos += pts;
-        editorFds[editor.id].count += 1 / split;
+        if (!editorFds[editor.id]) editorFds[editor.id] = { tasks: [], bonus: 0 };
+        var fdsValue = CONFIG.BONUS.fds.perTask[pontos] || 0;
+        editorFds[editor.id].tasks.push({ peso: pontos, valor: fdsValue });
+        editorFds[editor.id].bonus += fdsValue / split;
       }
     });
   });
@@ -319,9 +342,24 @@ function calculatePontos_(tasks) {
   return { editors, unmatched, editorTaskIds, editorFds };
 }
 
+function matchList_(name, list) {
+  const n = (name || '').toLowerCase();
+  return list.some(f => n.includes(f));
+}
+
+function isTimeFixo_(name) { return matchList_(name, CONFIG.TIME_FIXO); }
+
+function classifyTeam_(name) {
+  if (matchList_(name, CONFIG.TIME_FIXO)) return 'fixed';
+  if (matchList_(name, CONFIG.TIME_IA)) return 'ia';
+  if (matchList_(name, CONFIG.FREELAS)) return 'freela';
+  return 'freela'; // default: unknown goes to freela
+}
+
 function calculateTurbo_(editors, threshold) {
   const turboDays = {};
   editors.forEach(editor => {
+    if (!isTimeFixo_(editor.name)) return;
     const days = [];
     Object.entries(editor.daily).forEach(([date, pontos]) => {
       if (pontos > threshold) days.push({ date, pontos });
@@ -387,9 +425,9 @@ function calculateTurbinho_(editors, editorTaskIds) {
     });
   }
 
-  // Calculate per editor
+  // Calculate per editor (only time fixo)
   editors.forEach(editor => {
-    if (editor.team === 'freela') return;
+    if (!isTimeFixo_(editor.name)) return;
     const taskIds = editorTaskIds[editor.id] || [];
     const semAjuste = taskIds.filter(id => !taskAjusteMap[id]).length;
     const comAjuste = taskIds.filter(id => taskAjusteMap[id]).length;
@@ -411,14 +449,14 @@ function calculateTurbinho_(editors, editorTaskIds) {
 function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
   const { editors, unmatched, editorFds } = counts;
 
-  // Rank fixed and freela separately (freelas don't affect fixed ranking)
-  const fixedEditors = editors.filter(e => e.team !== 'freela');
-  const freelaEditors = editors.filter(e => e.team === 'freela');
+  // Rank: only time fixo editors compete for ranking/bonus
+  const fixedEditors = editors.filter(e => isTimeFixo_(e.name));
+  const otherEditors = editors.filter(e => !isTimeFixo_(e.name));
   fixedEditors.sort((a, b) => b.pontos - a.pontos);
   fixedEditors.forEach((e, i) => { e.rank = i + 1; });
-  freelaEditors.sort((a, b) => b.pontos - a.pontos);
+  otherEditors.sort((a, b) => b.pontos - a.pontos);
 
-  // Assign bonus — fixed team
+  // Assign bonus — fixed team only
   fixedEditors.forEach(e => {
     const bonusEntry = CONFIG.BONUS.productivity.find(b => b.rank === e.rank);
     const prodBonus = bonusEntry ? bonusEntry.value : 0;
@@ -427,8 +465,8 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
     const turbinho = turbinhoData[e.id];
     const turbinhoBonus = turbinho ? turbinho.bonus : 0;
     const fdsData = editorFds[e.id];
-    const fdsPontos = fdsData ? Math.round(fdsData.pontos * 10) / 10 : 0;
-    const fdsBonus = Math.round(fdsPontos * CONFIG.BONUS.fds.perPonto * 100) / 100;
+    const fdsBonus = fdsData ? Math.round(fdsData.bonus * 100) / 100 : 0;
+    const fdsCount = fdsData ? fdsData.tasks.length : 0;
     e.bonus = {
       productivity: prodBonus,
       turbo: turboBonus,
@@ -436,17 +474,21 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
       turbinho: turbinhoBonus,
       turbinho_count: turbinho ? turbinho.sem_ajuste : 0,
       fds: fdsBonus,
-      fds_pontos: fdsPontos,
+      fds_count: fdsCount,
       total: prodBonus + turboBonus + turbinhoBonus + fdsBonus,
     };
   });
 
-  // Assign bonus — freelas
-  freelaEditors.forEach(e => {
-    e.bonus = { freelaTotal: Math.round(e.pontos * CONFIG.BONUS.freelaPerPonto * 100) / 100 };
+  // Assign bonus — other editors (freelas get per-point, rest get nothing)
+  otherEditors.forEach(e => {
+    if (e.team === 'freela') {
+      e.bonus = { freelaTotal: Math.round(e.pontos * CONFIG.BONUS.freelaPerPonto * 100) / 100 };
+    } else {
+      e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, fds_pontos: 0, total: 0 };
+    }
   });
 
-  const allEditors = fixedEditors.concat(freelaEditors);
+  const allEditors = fixedEditors.concat(otherEditors);
 
   return {
     metadata: {

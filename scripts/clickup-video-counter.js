@@ -56,11 +56,36 @@ const BONUS_CONFIG = {
   ],
   metaDiaria: 6, // meta mínima diária: 6 pontos
   turbo: { value: 100, threshold: 8 }, // TURBO: 8+ pontos/dia
-  turbinho: { value: 20 }, // R$20 por criativo sem ajuste
-  fds: { perPonto: 10, tags: ['fds edição', 'feriado edição'] },
+  turbinho: { value: 10 }, // R$10 por criativo sem ajuste
+  fds: { perTask: { 1: 35, 2: 50 }, tags: ['fds edição', 'feriado edição'] },
   ajusteStatuses: ['para ajustar', 'para ajustar cliente'],
   freelaPerPonto: 35,
 };
+
+// Time fixo — apenas esses editores recebem TURBO e Turbinho
+const TIME_FIXO = [
+  'pedro ximenes', 'lílian elen', 'lilian elen',
+  'rafael nóbrega', 'rafael nobrega',
+  'bruna', 'vinícius', 'vinicius', 'daniel', 'ricardo',
+];
+const TIME_IA = ['rafael gomes'];
+const FREELAS = [
+  'bianca', 'ághata', 'agatha', 'maria eduarda',
+  'gabriel bonilha', 'raphael', 'saturno', 'gustavo', 'hugo',
+];
+const NAME_ALIASES = { 'saturno': 'Raphael (Saturno)' };
+
+function isTimeFixo(name) {
+  const n = (name || '').toLowerCase();
+  return TIME_FIXO.some(f => n.includes(f));
+}
+
+function classifyTeam(name) {
+  const n = (name || '').toLowerCase();
+  if (TIME_FIXO.some(f => n.includes(f))) return 'fixed';
+  if (TIME_IA.some(f => n.includes(f))) return 'ia';
+  return 'freela';
+}
 
 // ─── Task Name Pattern ───────────────────────────────────────────────────────
 // [398] [P13][MC][21/02] MODA - Thais
@@ -168,13 +193,7 @@ function extractEditor(task) {
     }
   }
 
-  if (task.assignees && task.assignees.length > 0) {
-    return task.assignees.map(a => ({
-      id: a.id,
-      name: a.username || a.email || `User ${a.id}`,
-    }));
-  }
-
+  // No fallback to assignees — only "Editor" field counts
   return [];
 }
 
@@ -358,6 +377,7 @@ function calculateTurbo(editors, threshold) {
   const turboDays = {};
 
   for (const editor of editors) {
+    if (!isTimeFixo(editor.name)) continue;
     const days = [];
     for (const [date, pontos] of Object.entries(editor.daily)) {
       if (pontos > threshold) {
@@ -394,7 +414,7 @@ async function getBulkTimeInStatus(taskIds) {
 
 /**
  * Check status history for all tasks and calculate Turbinho bonus.
- * Turbinho = R$20 per task that was approved without ever going through adjustment.
+ * Turbinho = R$10 per task that was approved without ever going through adjustment.
  * Uses bulk endpoint (100 tasks per call) for efficiency.
  */
 async function calculateTurbinho(editors, editorTaskIds) {
@@ -431,7 +451,7 @@ async function calculateTurbinho(editors, editorTaskIds) {
 
   // Calculate per-editor turbinho
   for (const editor of editors) {
-    if (editor.team === 'freela') continue;
+    if (!isTimeFixo(editor.name)) continue;
     const taskIds = editorTaskIds.get(editor.id) || [];
     const semAjuste = taskIds.filter(id => !taskAjusteMap.get(id)).length;
     const comAjuste = taskIds.filter(id => taskAjusteMap.get(id)).length;
@@ -455,14 +475,14 @@ async function calculateTurbinho(editors, editorTaskIds) {
 function generateReport(counts, turboDays, turbinhoData, month, totalTasksFetched) {
   const { editors, unmatched, editorFds } = counts;
 
-  // Rank fixed and freela separately (freelas don't affect fixed ranking)
-  const fixedEditors = editors.filter(e => e.team !== 'freela');
-  const freelaEditors = editors.filter(e => e.team === 'freela');
+  // Rank: only time fixo editors compete for ranking/bonus
+  const fixedEditors = editors.filter(e => isTimeFixo(e.name));
+  const otherEditors = editors.filter(e => !isTimeFixo(e.name));
   fixedEditors.sort((a, b) => b.pontos - a.pontos);
   fixedEditors.forEach((e, i) => { e.rank = i + 1; });
-  freelaEditors.sort((a, b) => b.pontos - a.pontos);
+  otherEditors.sort((a, b) => b.pontos - a.pontos);
 
-  // Assign bonus
+  // Assign bonus — time fixo only
   for (const e of fixedEditors) {
     const bonusEntry = BONUS_CONFIG.productivity.find(b => b.rank === e.rank);
     const prodBonus = bonusEntry ? bonusEntry.value : 0;
@@ -484,14 +504,17 @@ function generateReport(counts, turboDays, turbinhoData, month, totalTasksFetche
       total: prodBonus + turboBonus + turbinhoBonus + fdsBonus,
     };
   }
-  for (const e of freelaEditors) {
-    e.bonus = {
-      freelaTotal: Math.round(e.pontos * BONUS_CONFIG.freelaPerPonto * 100) / 100,
-    };
+  // Other editors: freelas get per-point, rest get nothing
+  for (const e of otherEditors) {
+    if (e.team === 'freela') {
+      e.bonus = { freelaTotal: Math.round(e.pontos * BONUS_CONFIG.freelaPerPonto * 100) / 100 };
+    } else {
+      e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, fds_pontos: 0, total: 0 };
+    }
   }
 
-  // Merge back: fixed first (ranked), then freelas
-  const allEditors = [...fixedEditors, ...freelaEditors];
+  // Merge back: fixed first (ranked), then others
+  const allEditors = [...fixedEditors, ...otherEditors];
 
   const totalPontos = allEditors.reduce((a, e) => a + e.pontos, 0);
 
