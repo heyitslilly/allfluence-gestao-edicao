@@ -28,8 +28,8 @@
  * ║     (Futuro: cálculo automático por 8+ pts/dia)                ║
  * ║                                                                ║
  * ║  ✨ TURBINHO  +R$10 por vídeo (Time Fixo)                      ║
- * ║     Criativo entregue DIRETO, sem ajuste 👌                    ║
- * ║     (nunca passou por "para ajustar" / "para ajustar cliente") ║
+ * ║     Criativo que passou por APROVADO 👌 sem ter passado por   ║
+ * ║     "para ajustar" ou "para ajustar cliente".                  ║
  * ║                                                                ║
  * ║  📅 FDS / FERIADO (Time Fixo)                                  ║
  * ║     Peso 1 ─────────────────────────────────────── R$ 35       ║
@@ -473,6 +473,7 @@ function calculateTurbinho_(editors, editorTaskIds) {
 
   // Use bulk endpoint in batches of 100 (ClickUp limit)
   const taskAjusteMap = {};
+  const taskAprovadoMap = {};
   for (var i = 0; i < uniqueIds.length; i += 100) {
     var batch = uniqueIds.slice(i, i + 100);
     Logger.log('Turbinho bulk check: ' + (i + batch.length) + '/' + uniqueIds.length);
@@ -482,27 +483,36 @@ function calculateTurbinho_(editors, editorTaskIds) {
       var data = bulkResult[taskId];
       if (!data || !data.status_history) {
         taskAjusteMap[taskId] = false;
+        taskAprovadoMap[taskId] = false;
         return;
       }
       taskAjusteMap[taskId] = data.status_history.some(function(s) {
         return CONFIG.BONUS.ajusteStatuses.indexOf((s.status || '').toLowerCase()) !== -1;
       });
+      taskAprovadoMap[taskId] = data.status_history.some(function(s) {
+        return (s.status || '').toLowerCase() === 'aprovado';
+      });
     });
   }
 
   // Calculate per editor (only time fixo)
+  // Turbinho = passed through "aprovado" AND never had "para ajustar"/"para ajustar cliente"
   editors.forEach(editor => {
     if (!isTimeFixo_(editor.name)) return;
     const taskIds = editorTaskIds[editor.id] || [];
-    const semAjuste = taskIds.filter(id => !taskAjusteMap[id]).length;
-    const comAjuste = taskIds.filter(id => taskAjusteMap[id]).length;
+    const aprovados = taskIds.filter(id => taskAprovadoMap[id]);
+    const semAjuste = aprovados.filter(id => !taskAjusteMap[id]).length;
+    const comAjuste = aprovados.filter(id => taskAjusteMap[id]).length;
+    const pendentes = taskIds.filter(id => !taskAprovadoMap[id]).length;
 
     if (semAjuste > 0) {
       turbinhoData[editor.id] = {
         name: editor.name,
         total_tasks: taskIds.length,
+        aprovados: aprovados.length,
         sem_ajuste: semAjuste,
         com_ajuste: comAjuste,
+        pendentes: pendentes,
         bonus: semAjuste * CONFIG.BONUS.turbinho.value,
       };
     }

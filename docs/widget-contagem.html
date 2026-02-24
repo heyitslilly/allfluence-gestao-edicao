@@ -134,7 +134,7 @@ function render(data) {
   // Turbinho
   html += '<div style="background:#10b98110;border:1px solid #10b98133;border-radius:8px;padding:10px 12px">';
   html += '<div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:4px">&#x2728; TURBINHO <span style="font-size:10px;color:#34d399">+R$10/vid</span></div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Criativo entregue <span style="color:#10b981;font-weight:700">direto</span>, sem ajuste &#x1F44C;</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Passou por <span style="color:#10b981;font-weight:700">APROVADO</span> sem ter passado por &ldquo;para ajustar&rdquo; &#x1F44C;</div>';
   html += '</div>';
   // FDS
   html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
@@ -296,12 +296,16 @@ function render(data) {
   // Turbinho details
   if (data.turbinho_summary && Object.keys(data.turbinho_summary).length > 0) {
     html += '<div class="card" style="border:1px solid #10b98144">';
-    html += '<h3 style="color:#10b981">&#x2728; Turbinho (sem ajuste)</h3>';
+    html += '<h3 style="color:#10b981">&#x2728; Turbinho (aprovado sem ajuste)</h3>';
 
     Object.values(data.turbinho_summary).forEach(tb => {
-      var pct = tb.total_tasks > 0 ? Math.round(tb.sem_ajuste / tb.total_tasks * 100) : 0;
+      var aprovados = tb.aprovados || (tb.sem_ajuste + tb.com_ajuste);
+      var pct = aprovados > 0 ? Math.round(tb.sem_ajuste / aprovados * 100) : 0;
+      var pendentes = tb.pendentes || 0;
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b">';
-      html += '<div style="font-weight:600;font-size:12px">' + tb.name.split(' ')[0] + ' <span style="color:#64748b;font-size:11px">' + tb.sem_ajuste + '/' + tb.total_tasks + ' direto (' + pct + '%)</span></div>';
+      html += '<div style="font-weight:600;font-size:12px">' + tb.name.split(' ')[0] + ' <span style="color:#64748b;font-size:11px">' + tb.sem_ajuste + '/' + aprovados + ' direto (' + pct + '%)';
+      if (pendentes > 0) html += ' &middot; ' + pendentes + ' n&atilde;o aprovado(s)';
+      html += '</span></div>';
       html += '<div style="font-weight:700;font-size:12px;color:#10b981">R$ ' + tb.bonus + '</div>';
       html += '</div>';
     });
