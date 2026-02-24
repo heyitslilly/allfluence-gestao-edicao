@@ -29,8 +29,9 @@
   .chart-avg-label { font-size: 12px; color: #94a3b8; }
   .chart-avg-label b { color: #e2e8f0; }
   .chart-area { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 200px; padding-left: 30px; }
-  .chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
-  .chart-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; }
+  .chart-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; cursor: pointer; }
+  .chart-bar-col:hover .chart-bar-stack { opacity: 0.85; }
+  .chart-bar-stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; transition: opacity .15s; }
   .chart-bar-seg { width: 100%; min-height: 0; }
   .chart-bar-total { font-size: 10px; font-weight: 700; color: #e2e8f0; margin-bottom: 2px; text-align: center; }
   .chart-bar-date { font-size: 9px; color: #64748b; margin-top: 4px; white-space: nowrap; }
@@ -39,6 +40,13 @@
   .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding-left: 30px; }
   .chart-legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #94a3b8; }
   .chart-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .chart-tooltip { display: none; position: absolute; z-index: 10; background: #fff; color: #1e293b; border-radius: 8px; padding: 10px 14px; box-shadow: 0 4px 20px rgba(0,0,0,.35); font-size: 12px; line-height: 1.7; pointer-events: none; min-width: 180px; white-space: nowrap; }
+  .chart-tooltip .tt-date { font-weight: 700; font-size: 13px; margin-bottom: 4px; color: #334155; }
+  .chart-tooltip .tt-row { display: flex; align-items: center; gap: 6px; }
+  .chart-tooltip .tt-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .chart-tooltip .tt-name { flex: 1; }
+  .chart-tooltip .tt-val { font-weight: 700; }
+  .chart-tooltip .tt-total { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; color: #ef4444; font-weight: 700; font-style: italic; }
   .loading { text-align: center; padding: 40px; color: #64748b; }
   .error { text-align: center; padding: 20px; color: #ef4444; background: #7f1d1d22; border-radius: 8px; }
   .meta { font-size: 11px; color: #64748b; text-align: center; margin-top: 8px; }
@@ -224,6 +232,52 @@ function render(data) {
   html += '<div class="meta">Atualizado: ' + (cachedAt ? new Date(cachedAt).toLocaleString('pt-BR') : '—') + '</div>';
 
   app.innerHTML = html;
+  initChartTooltip();
+}
+
+function initChartTooltip() {
+  const tooltip = document.getElementById('chartTooltip');
+  if (!tooltip) return;
+  const chartArea = tooltip.closest('.chart-area');
+  if (!chartArea) return;
+
+  const cols = chartArea.querySelectorAll('.chart-bar-col');
+  cols.forEach(col => {
+    col.addEventListener('mouseenter', function(ev) {
+      const idx = parseInt(this.dataset.ttIdx);
+      const ttData = window._chartTooltipData && window._chartTooltipData[idx];
+      const dtData = window._chartDayTotals && window._chartDayTotals[idx];
+      if (!ttData) return;
+
+      let content = '<div class="tt-date">' + ttData.label + '</div>';
+      ttData.entries.forEach(e => {
+        content += '<div class="tt-row">';
+        content += '<div class="tt-dot" style="background:' + e.color + '"></div>';
+        content += '<span class="tt-name">' + e.name + ':</span>';
+        content += '<span class="tt-val">' + e.val + '</span>';
+        content += '</div>';
+      });
+      if (dtData) content += '<div class="tt-total">Total: ' + dtData.total + '</div>';
+
+      tooltip.innerHTML = content;
+      tooltip.style.display = 'block';
+    });
+
+    col.addEventListener('mousemove', function(ev) {
+      const rect = chartArea.getBoundingClientRect();
+      let left = ev.clientX - rect.left + 12;
+      let top = ev.clientY - rect.top - 10;
+      // Keep tooltip inside chart area
+      if (left + tooltip.offsetWidth > rect.width - 10) left = left - tooltip.offsetWidth - 24;
+      if (top < 0) top = 0;
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    });
+
+    col.addEventListener('mouseleave', function() {
+      tooltip.style.display = 'none';
+    });
+  });
 }
 
 const EDITOR_COLORS = [
@@ -283,10 +337,22 @@ function renderDailyChart(editors) {
   const avgPct = Math.min((avg / yMax) * 100, 100);
   h += '<div class="chart-avg-line" style="bottom:' + avgPct + '%"></div>';
 
+  // Build tooltip data per date (sorted desc by pontos)
+  const MONTHS_SHORT = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const tooltipData = dates.map(date => {
+    const entries = editorList
+      .map(e => ({ name: e.name, val: e.daily[date] || 0, color: colorMap[e.name] }))
+      .filter(x => x.val > 0)
+      .sort((a, b) => b.val - a.val);
+    const d = new Date(date + 'T12:00:00');
+    const label = String(d.getDate()).padStart(2, '0') + ' ' + MONTHS_SHORT[d.getMonth()];
+    return { label, entries };
+  });
+
   // Bars
   dates.forEach((date, di) => {
     const dt = dayTotals[di];
-    h += '<div class="chart-bar-col">';
+    h += '<div class="chart-bar-col" data-tt-idx="' + di + '">';
     if (dt.total > 0) h += '<div class="chart-bar-total">' + dt.total + '</div>';
 
     h += '<div class="chart-bar-stack" style="height:' + ((dt.total / yMax) * 100) + '%">';
@@ -298,14 +364,16 @@ function renderDailyChart(editors) {
     });
     h += '</div>';
 
-    // Date label — show every other date or all if <= 15 days
     const d = new Date(date + 'T12:00:00');
-    const label = String(d.getDate()).padStart(2, '0') + ' ' + ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][d.getMonth()];
+    const label = String(d.getDate()).padStart(2, '0') + ' ' + MONTHS_SHORT[d.getMonth()];
     if (dates.length <= 20 || di % 2 === 0) {
       h += '<div class="chart-bar-date">' + label + '</div>';
     }
     h += '</div>';
   });
+
+  // Tooltip element
+  h += '<div class="chart-tooltip" id="chartTooltip"></div>';
 
   h += '</div>'; // chart-area
 
@@ -320,6 +388,11 @@ function renderDailyChart(editors) {
   h += '</div>';
 
   h += '</div></div>'; // chart-wrap, card
+
+  // Store tooltip data globally for event handler
+  window._chartTooltipData = tooltipData;
+  window._chartDayTotals = dayTotals;
+
   return h;
 }
 
