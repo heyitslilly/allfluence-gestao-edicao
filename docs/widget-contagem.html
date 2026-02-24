@@ -114,7 +114,17 @@ function render(data) {
   // Header
   html += '<div style="margin-bottom: 12px">';
   html += '<h2>Contagem de Pontos</h2>';
-  html += '<div class="subtitle">Mes: ' + (data.metadata?.month || '—') + ' &middot; Meta: ' + metaDiaria + ' pts/dia &middot; TURBO: tag turbo (+R$100/vid)</div>';
+  html += '<div class="subtitle">Mes: ' + (data.metadata?.month || '—') + ' &middot; Meta: ' + metaDiaria + ' pts/dia</div>';
+  html += '</div>';
+
+  // Bonus explanation
+  html += '<div class="card" style="border:1px solid #334155;padding:12px 16px;margin-bottom:12px;font-size:11px;line-height:1.8;color:#94a3b8">';
+  html += '<div style="font-weight:700;color:#e2e8f0;font-size:12px;margin-bottom:6px">Como funcionam os bonus (Time Fixo)</div>';
+  html += '<div><span style="color:#fbbf24;font-weight:700">PRODUTIVIDADE</span> &mdash; 1&ordm; lugar no ranking = R$500, 2&ordm; lugar = R$250</div>';
+  html += '<div><span style="color:#f97316;font-weight:700">TURBO (+R$100)</span> &mdash; Em qualquer dia que o editor fixo fizer mais de 8 pontos. Identificado pela tag <span style="color:#f97316">&ldquo;turbo&rdquo;</span> no ClickUp.</div>';
+  html += '<div><span style="color:#10b981;font-weight:700">TURBINHO (+R$10)</span> &mdash; Por cada criativo entregue sem passar por ajuste.</div>';
+  html += '<div><span style="color:#fbbf24;font-weight:700">FDS/FERIADO</span> &mdash; R$35 (peso 1) ou R$50 (peso 2) por criativo com tag &ldquo;fds edi&ccedil;&atilde;o&rdquo; ou &ldquo;feriado edi&ccedil;&atilde;o&rdquo;.</div>';
+  html += '<div style="margin-top:4px"><span style="color:#f97316;font-weight:700">FREELAS</span> &mdash; R$35 (peso 1) ou R$50 (peso 2) por criativo editado.</div>';
   html += '</div>';
 
   // Stats
