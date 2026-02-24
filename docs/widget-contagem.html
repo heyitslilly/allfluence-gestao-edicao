@@ -69,7 +69,7 @@
 <script>
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 // Replace with your Google Apps Script Web App URL after deploying
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwsf8fltl5IqdSOuTwZSIyeVZt16CHCLbmVe9MoGZHKzwFcTt6x723jCWiJxzxgzOrG/exec';
+const GAS_URL = '';
 const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minutes
 const META_DIARIA = 6;
 const TURBO_THRESHOLD = 8;
@@ -320,7 +320,7 @@ function renderDailyChart(editors) {
 
   // Header
   h += '<div class="chart-header">';
-  h += '<h3>EDICOES ESTE MES (por dia)</h3>';
+  h += '<h3>PONTOS POR DIA</h3>';
   h += '<div class="chart-avg-label">Media: <b>' + avg.toFixed(2) + '</b></div>';
   h += '</div>';
 
