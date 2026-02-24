@@ -303,8 +303,8 @@ function render(data) {
       var pct = aprovados > 0 ? Math.round(tb.sem_ajuste / aprovados * 100) : 0;
       var pendentes = tb.pendentes || 0;
       html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b">';
-      html += '<div style="font-weight:600;font-size:12px">' + tb.name.split(' ')[0] + ' <span style="color:#64748b;font-size:11px">' + tb.sem_ajuste + '/' + aprovados + ' direto (' + pct + '%)';
-      if (pendentes > 0) html += ' &middot; ' + pendentes + ' n&atilde;o aprovado(s)';
+      html += '<div style="font-weight:600;font-size:12px">' + tb.name.split(' ')[0] + ' <span style="color:#64748b;font-size:11px">' + tb.sem_ajuste + '/' + aprovados + ' aprovados direto (' + pct + '%)';
+      if (pendentes > 0) html += ' &middot; ' + pendentes + ' esperando APROVA&Ccedil;&Atilde;O';
       html += '</span></div>';
       html += '<div style="font-weight:700;font-size:12px;color:#10b981">R$ ' + tb.bonus + '</div>';
       html += '</div>';
@@ -350,7 +350,7 @@ function showCriativos(idx) {
 
   h += '<div class="card">';
   h += '<table class="detail-table"><thead><tr>';
-  h += '<th style="width:55%">Criativos editados</th><th style="width:10%">Pts</th><th style="width:20%">Primeira Edicao</th><th style="width:15%">Status</th>';
+  h += '<th style="width:40%">Criativos editados</th><th style="width:8%">Pts</th><th style="width:16%">Primeira Edicao</th><th style="width:16%">Aprovacao</th><th style="width:12%">Status</th>';
   h += '</tr></thead><tbody>';
 
   tasks.forEach(t => {
@@ -363,6 +363,15 @@ function showCriativos(idx) {
       const d = new Date(t.primeira_edicao + 'T12:00:00');
       if (!isNaN(d.getTime())) {
         peHtml = String(d.getDate()) + '/' + String(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(2);
+      }
+    }
+
+    // Format aprovacao date
+    let apHtml = '—';
+    if (t.aprovado_date) {
+      const da = new Date(t.aprovado_date + 'T12:00:00');
+      if (!isNaN(da.getTime())) {
+        apHtml = String(da.getDate()) + '/' + String(da.getMonth() + 1) + '/' + String(da.getFullYear()).slice(2);
       }
     }
 
@@ -385,6 +394,7 @@ function showCriativos(idx) {
     h += '<td>' + nameHtml + turboTag + '</td>';
     h += '<td style="text-align:center;font-weight:700;color:#10b981">' + t.pts + '</td>';
     h += '<td style="text-align:center;color:#94a3b8;font-size:11px">' + peHtml + '</td>';
+    h += '<td style="text-align:center;color:#94a3b8;font-size:11px">' + apHtml + '</td>';
     h += '<td style="text-align:center">' + statusHtml + '</td>';
     h += '</tr>';
   });

@@ -474,6 +474,7 @@ function calculateTurbinho_(editors, editorTaskIds) {
   // Use bulk endpoint in batches of 100 (ClickUp limit)
   const taskAjusteMap = {};
   const taskAprovadoMap = {};
+  const taskAprovadoDate = {};
   for (var i = 0; i < uniqueIds.length; i += 100) {
     var batch = uniqueIds.slice(i, i + 100);
     Logger.log('Turbinho bulk check: ' + (i + batch.length) + '/' + uniqueIds.length);
@@ -484,14 +485,23 @@ function calculateTurbinho_(editors, editorTaskIds) {
       if (!data || !data.status_history) {
         taskAjusteMap[taskId] = false;
         taskAprovadoMap[taskId] = false;
+        taskAprovadoDate[taskId] = null;
         return;
       }
       taskAjusteMap[taskId] = data.status_history.some(function(s) {
         return CONFIG.BONUS.ajusteStatuses.indexOf((s.status || '').toLowerCase()) !== -1;
       });
-      taskAprovadoMap[taskId] = data.status_history.some(function(s) {
+      var aprovadoEntry = data.status_history.find(function(s) {
         return (s.status || '').toLowerCase() === 'aprovado';
       });
+      taskAprovadoMap[taskId] = !!aprovadoEntry;
+      // Extract approval date from time_in_status "since" timestamp
+      if (aprovadoEntry && aprovadoEntry.total_time && aprovadoEntry.total_time.since) {
+        var d = new Date(parseInt(aprovadoEntry.total_time.since));
+        taskAprovadoDate[taskId] = isNaN(d.getTime()) ? null : Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      } else {
+        taskAprovadoDate[taskId] = null;
+      }
     });
   }
 
@@ -518,10 +528,10 @@ function calculateTurbinho_(editors, editorTaskIds) {
     }
   });
 
-  return turbinhoData;
+  return { turbinhoData: turbinhoData, taskAprovadoDate: taskAprovadoDate };
 }
 
-function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
+function generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, month, totalTasks) {
   const { editors, unmatched, editorFds, editorTaskWeights, editorTaskNames } = counts;
 
   // Rank: only time fixo editors compete for ranking/bonus
@@ -557,6 +567,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
       name: t.name, pts: t.pontos, task_id: t.task_id,
       primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
       is_turbo: t.is_turbo || false,
+      aprovado_date: taskAprovadoDate[t.task_id] || null,
     }));
   });
 
@@ -569,6 +580,7 @@ function generateReport_(counts, turboDays, turbinhoData, month, totalTasks) {
         name: t.name, pts: t.pontos, task_id: t.task_id,
         primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
         is_turbo: t.is_turbo || false,
+        aprovado_date: taskAprovadoDate[t.task_id] || null,
       }));
       e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100, tasks: tasks };
     } else {
@@ -654,8 +666,10 @@ function videoCounterMain(customMonth) {
   });
 
   const turboDays = calculateTurbo_(counts.editors, counts.editorTurboTasks);
-  const turbinhoData = calculateTurbinho_(counts.editors, counts.editorTaskIds);
-  const report = generateReport_(counts, turboDays, turbinhoData, month, allTasks.length);
+  const turbinhoResult = calculateTurbinho_(counts.editors, counts.editorTaskIds);
+  const turbinhoData = turbinhoResult.turbinhoData;
+  const taskAprovadoDate = turbinhoResult.taskAprovadoDate;
+  const report = generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, month, allTasks.length);
 
   // Cache result in Script Properties (persists between runs)
   const cache = PropertiesService.getScriptProperties();
