@@ -13,6 +13,26 @@
  *   5. Adicione trigger: videoCounterMain(), Time-driven, Every 12 hours
  *
  * @version 1.0.0
+ *
+ * ── Bônus (apenas Time Fixo) ──────────────────────────────────────────────
+ *
+ *   PRODUTIVIDADE    1º lugar no ranking mensal = R$500, 2º lugar = R$250
+ *
+ *   TURBO (+R$100)   Em qualquer dia que o editor FIXO fizer mais de 8 pontos.
+ *                    Atualmente identificado pela tag "turbo" no ClickUp.
+ *                    Futuramente será calculado automaticamente (8+ pts/dia).
+ *
+ *   TURBINHO (+R$10) Por cada criativo entregue sem passar por ajuste
+ *                    (nunca entrou em status "para ajustar" ou "para ajustar cliente").
+ *
+ *   FDS/FERIADO      R$35 (peso 1) ou R$50 (peso 2) por criativo com tag
+ *                    "fds edição" ou "feriado edição".
+ *
+ * ── Freelas ───────────────────────────────────────────────────────────────
+ *
+ *   POR CRIATIVO     R$35 (peso 1) ou R$50 (peso 2) por criativo editado.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
  */
 
 // ─── Config ──────────────────────────────────────────────────────────────────
