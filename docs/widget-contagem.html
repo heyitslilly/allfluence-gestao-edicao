@@ -657,6 +657,37 @@ const PROJECT_BUDGETS = {
   TTCX: { type: 'monthly', monthly: 5000 },
 };
 
+// Meses fechados com dados manuais (não calculados pela API)
+const OVERRIDE_MONTHS = {
+  '2026-01': {
+    BBB: {
+      total: 4430,
+      lines: [
+        { label: 'Time Fixo (freela + revisor + b\u00F4nus)', value: 2660 },
+        { label: 'Time Freela', value: 1120 },
+        { label: 'Revis\u00E3o avulsa (150/dia, 3 dias)', value: 450 },
+        { label: 'Outros ajustes', value: 200 },
+      ],
+      detail: [
+        { name: 'Bruna', desc: '12 v\u00EDdeos freela + b\u00F4nus 1\u00BA', value: 420 },
+        { name: 'Ricardo', desc: '8 v\u00EDdeos freela + 1 turbo + b\u00F4nus 2\u00BA', value: 380 },
+        { name: 'L\u00EDlian', desc: '2 dias revis\u00E3o + 2 v\u00EDdeos freela', value: 370 },
+        { name: 'Pedro', desc: '1 dia revis\u00E3o + 4 v\u00EDdeos freela', value: 290 },
+        { name: 'Gabriel Bonilha', desc: '8 v\u00EDdeos', value: 280 },
+        { name: 'Gustavo', desc: '6 v\u00EDdeos', value: 210 },
+        { name: 'Bianca', desc: '6 v\u00EDdeos', value: 210 },
+        { name: 'Raphael Pires', desc: '5 v\u00EDdeos', value: 175 },
+        { name: 'Rafael N\u00F3brega', desc: '5 v\u00EDdeos freela', value: 175 },
+        { name: 'Daniel', desc: '2 v\u00EDdeos freela + 1 turbo', value: 170 },
+        { name: 'Mellin', desc: '3 v\u00EDdeos', value: 105 },
+        { name: 'Vin\u00EDcius', desc: '3 v\u00EDdeos freela', value: 105 },
+        { name: 'Maria Eduarda', desc: '2 v\u00EDdeos', value: 70 },
+        { name: 'Rafael Gomes', desc: '2 v\u00EDdeos', value: 70 },
+      ],
+    },
+  },
+};
+
 // ─── Tab System ─────────────────────────────────────────────────────────────
 
 function switchTab(tab) {
@@ -738,12 +769,6 @@ function renderBudgetTracker(proj, currentSpent, month, cfg) {
 
 function renderGastos(data) {
   var container = document.getElementById('gastos-content');
-  var ps = data.projects_summary;
-  if (!ps || Object.keys(ps).length === 0) {
-    container.innerHTML = '<div class="error">Nenhum dado de projetos encontrado. Execute a API com refresh para gerar.</div>';
-    return;
-  }
-
   var month = data.metadata && data.metadata.month ? data.metadata.month : '';
   var MONTHS_BR_UPPER = ['JANEIRO','FEVEREIRO','MAR\u00C7O','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
   var monthLabel = '';
@@ -752,11 +777,25 @@ function renderGastos(data) {
     monthLabel = MONTHS_BR_UPPER[parts[1] - 1] || '';
   }
 
+  var projColors = { BBB: '#3b82f6', TTCX: '#8b5cf6', Outros: '#64748b' };
+
+  // Check for manual override for this month
+  var override = OVERRIDE_MONTHS[month];
+  if (override) {
+    renderGastosOverride(container, override, month, monthLabel, projColors);
+    return;
+  }
+
+  var ps = data.projects_summary;
+  if (!ps || Object.keys(ps).length === 0) {
+    container.innerHTML = '<div class="error">Nenhum dado de projetos encontrado. Execute a API com refresh para gerar.</div>';
+    return;
+  }
+
   var totalGeral = 0;
   Object.values(ps).forEach(function(p) { totalGeral += p.costs.total; });
 
   var projKeys = Object.keys(ps).sort(function(a, b) { return ps[b].costs.total - ps[a].costs.total; });
-  var projColors = { BBB: '#3b82f6', TTCX: '#8b5cf6', Outros: '#64748b' };
 
   var h = '';
 
@@ -840,6 +879,88 @@ function renderGastos(data) {
         h += '<td style="text-align:center;padding:4px 6px">' + (d.fds ? fmtBRL(d.fds) : '\u2014') + '</td>';
         h += '<td style="text-align:center;padding:4px 6px">' + (d.freela ? fmtBRL(d.freela) : '\u2014') + '</td>';
         h += '<td style="text-align:right;padding:4px 6px;font-weight:700;color:#e2e8f0">' + fmtBRL(d.total) + '</td>';
+        h += '</tr>';
+      });
+
+      h += '</tbody></table>';
+      h += '</div>';
+    }
+
+    h += '</div>';
+  });
+
+  container.innerHTML = h;
+}
+
+// Render gastos from manual override data (meses fechados)
+function renderGastosOverride(container, override, month, monthLabel, projColors) {
+  var projKeys = Object.keys(override).sort(function(a, b) { return override[b].total - override[a].total; });
+  var totalGeral = 0;
+  projKeys.forEach(function(proj) { totalGeral += override[proj].total; });
+
+  var h = '';
+
+  // Header
+  h += '<div style="margin-bottom:12px">';
+  h += '<h2>Gastos por Projeto</h2>';
+  h += '<div class="subtitle">M\u00EAs: ' + (month || '\u2014') + ' ' + monthLabel + ' <span style="background:#334155;color:#fbbf24;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">FECHADO</span></div>';
+  h += '</div>';
+
+  // Stats resumo
+  h += '<div class="stats">';
+  projKeys.forEach(function(proj) {
+    var color = projColors[proj] || '#64748b';
+    h += miniStatCard(proj, fmtBRL(override[proj].total), color);
+  });
+  h += miniStatCard('Total Geral', fmtBRL(totalGeral), '#10b981');
+  h += '</div>';
+
+  // Card por projeto
+  projKeys.forEach(function(proj) {
+    var ov = override[proj];
+    var cfg = PROJECT_BUDGETS[proj];
+    var color = projColors[proj] || '#64748b';
+
+    h += '<div class="project-card">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h += '<h3 style="margin:0;font-size:16px;color:' + color + '">' + proj + '</h3>';
+    h += '<div style="font-size:20px;font-weight:800;color:#e2e8f0">' + fmtBRL(ov.total) + '</div>';
+    h += '</div>';
+
+    // Budget tracker
+    if (cfg) {
+      h += renderBudgetTracker(proj, ov.total, month, cfg);
+    }
+
+    // Lines breakdown
+    if (ov.lines && ov.lines.length > 0) {
+      h += '<div style="margin-top:12px;background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155">';
+      h += '<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:8px">Composi\u00E7\u00E3o do gasto</div>';
+      ov.lines.forEach(function(line) {
+        h += '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px solid #1e293b">';
+        h += '<span style="color:#cbd5e1">' + line.label + '</span>';
+        h += '<span style="color:#e2e8f0;font-weight:700">' + fmtBRL(line.value) + '</span>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
+
+    // Editor detail table
+    if (ov.detail && ov.detail.length > 0) {
+      h += '<div style="margin-top:12px">';
+      h += '<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px">Discrimina\u00E7\u00E3o por editor</div>';
+      h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+      h += '<thead><tr style="border-bottom:1px solid #334155">';
+      h += '<th style="text-align:left;padding:4px 6px;color:#64748b">Editor</th>';
+      h += '<th style="text-align:left;padding:4px 6px;color:#64748b">Descri\u00E7\u00E3o</th>';
+      h += '<th style="text-align:right;padding:4px 6px;color:#64748b">Valor</th>';
+      h += '</tr></thead><tbody>';
+
+      ov.detail.forEach(function(d) {
+        h += '<tr style="border-bottom:1px solid #1e293b">';
+        h += '<td style="padding:4px 6px;font-weight:600">' + d.name + '</td>';
+        h += '<td style="padding:4px 6px;color:#94a3b8">' + d.desc + '</td>';
+        h += '<td style="text-align:right;padding:4px 6px;font-weight:700;color:#e2e8f0">' + fmtBRL(d.value) + '</td>';
         h += '</tr>';
       });
 
