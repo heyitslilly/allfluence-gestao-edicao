@@ -21,7 +21,6 @@
   td { padding: 8px; text-align: center; border-bottom: 1px solid #1e293b; }
   td:first-child { text-align: left; font-weight: 600; }
   .turbo-badge { display: inline-block; background: #f9731622; color: #f97316; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
-  .turbinho-badge { display: inline-block; background: #10b98122; color: #10b981; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
   .fds-badge { display: inline-block; background: #fbbf2422; color: #fbbf24; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
   .chart-wrap { position: relative; padding: 24px 0 0; }
   .chart-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
@@ -73,6 +72,8 @@
   <label style="font-size:12px;color:#94a3b8">Mês:</label>
   <input type="month" id="monthPicker" style="background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit" />
   <button onclick="loadMonth()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer">Carregar</button>
+  <button id="refreshBtn" onclick="refreshData()" style="background:#1e293b;color:#f97316;border:1px solid #f9731644;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600;transition:all .15s" onmouseover="this.style.background='#f97316';this.style.color='#fff'" onmouseout="this.style.background='#1e293b';this.style.color='#f97316'">&#x1F504; Atualizar</button>
+  <span id="refreshStatus" style="font-size:10px;color:#64748b"></span>
 </div>
 <div id="main-content">
 <div id="app">
@@ -128,13 +129,8 @@ function render(data) {
   html += '</div>';
   // Turbo
   html += '<div style="background:#f9731610;border:1px solid #f9731633;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; TURBO <span style="font-size:10px;color:#fb923c">+R$100/dia</span></div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Nos dias com pelo menos <span style="color:#f97316;font-weight:700">8 pontos</span> = dia turbo!<br>Tag <span style="background:#f9731622;color:#f97316;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">turbo</span> no ClickUp</div>';
-  html += '</div>';
-  // Turbinho
-  html += '<div style="background:#10b98110;border:1px solid #10b98133;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:4px">&#x2728; TURBINHO <span style="font-size:10px;color:#34d399">+R$10/criativo</span></div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Criativo <span style="color:#10b981;font-weight:700">APROVADO</span> sem ter passado por ajustes &#x1F44C;</div>';
+  html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; TURBO <span style="font-size:10px;color:#fb923c">+R$100/v&iacute;deo</span></div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">+R$100 no dia que editar mais v&iacute;deos que a cota di&aacute;ria<br>Tag <span style="background:#f9731622;color:#f97316;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">turbo</span> no ClickUp</div>';
   html += '</div>';
   // FDS
   html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
@@ -149,13 +145,11 @@ function render(data) {
   html += '</div></div>';
 
   // Stats
-  const totalTurbinho = fixed.reduce((a, e) => a + (e.bonus?.turbinho || 0), 0);
   const totalFds = fixed.reduce((a, e) => a + (e.bonus?.fds || 0), 0);
   html += '<div class="stats">';
   html += statCard(totalPontos, 'Total Pontos', '#10b981');
   html += statCard(avgPontos, 'Media/Editor', '#3b82f6');
   html += statCard('R$ ' + totalBonus, 'Bonus Total', '#fbbf24');
-  if (totalTurbinho > 0) html += statCard('R$ ' + totalTurbinho, 'Turbinho', '#10b981');
   if (totalFds > 0) html += statCard('R$ ' + totalFds, 'FDS/Feriado', '#fbbf24');
   if (freelas.length > 0) {
     const freelaCost = freelas.reduce((a, e) => a + (e.bonus?.freelaTotal || 0), 0);
@@ -196,7 +190,7 @@ function render(data) {
   html += '<div class="card">';
   html += '<h3>Pontos — Time Fixo</h3>';
   html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>Turbinho</th><th>FDS</th><th>Bonus</th><th></th>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>FDS</th><th>Bonus</th><th></th>';
   html += '</tr></thead><tbody>';
 
   // Store fixed editor data for detail page
@@ -209,8 +203,6 @@ function render(data) {
     const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : e.rank + 'o ';
     const turboCount = e.bonus?.turbo_days || 0;
     const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1;' + turboCount + '</span>' : '<span style="color:#334155">—</span>';
-    const turbinhoCount = e.bonus?.turbinho_count || 0;
-    const turbinhoHtml = turbinhoCount > 0 ? '<span class="turbinho-badge">&#x2728;' + turbinhoCount + '</span>' : '<span style="color:#334155">—</span>';
     const fdsVal = e.bonus?.fds || 0;
     const fdsHtml = fdsVal > 0 ? '<span class="fds-badge">&#x1F4C5;R$' + fdsVal + '</span>' : '<span style="color:#334155">—</span>';
     const bonusTotal = e.bonus?.total || 0;
@@ -219,7 +211,6 @@ function render(data) {
     html += '<td>' + medal + (e.name.split(' ')[0]) + '</td>';
     html += '<td style="font-weight:800;color:#10b981">' + e.totals.pontos + '</td>';
     html += '<td>' + turboHtml + '</td>';
-    html += '<td>' + turbinhoHtml + '</td>';
     html += '<td>' + fdsHtml + '</td>';
     html += '<td style="font-weight:700;color:' + (bonusTotal > 0 ? '#10b981' : '#475569') + '">R$ ' + bonusTotal + '</td>';
     html += '<td><button class="btn-criativos" data-fixed-idx="' + fi + '" onclick="showCriativos(' + fi + ')">Criativos</button></td>';
@@ -293,25 +284,8 @@ function render(data) {
     html += '</div>';
   }
 
-  // Turbinho details
-  if (data.turbinho_summary && Object.keys(data.turbinho_summary).length > 0) {
-    html += '<div class="card" style="border:1px solid #10b98144">';
-    html += '<h3 style="color:#10b981">&#x2728; Turbinho (aprovado sem ajuste)</h3>';
-
-    Object.values(data.turbinho_summary).forEach(tb => {
-      var aprovados = tb.aprovados || (tb.sem_ajuste + tb.com_ajuste);
-      var pct = aprovados > 0 ? Math.round(tb.sem_ajuste / aprovados * 100) : 0;
-      var pendentes = tb.pendentes || 0;
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #1e293b">';
-      html += '<div style="font-weight:600;font-size:12px">' + tb.name.split(' ')[0] + ' <span style="color:#64748b;font-size:11px">' + tb.sem_ajuste + '/' + aprovados + ' aprovados direto (' + pct + '%)';
-      if (pendentes > 0) html += ' &middot; ' + pendentes + ' em aprova&ccedil;&atilde;o';
-      html += '</span></div>';
-      html += '<div style="font-weight:700;font-size:12px;color:#10b981">R$ ' + tb.bonus + '</div>';
-      html += '</div>';
-    });
-
-    html += '</div>';
-  }
+  // Old Bonus Model (pre-Feb 2026)
+  html += renderOldBonusModel(data.editors, metaDiaria);
 
   // Meta
   const cachedAt = data.metadata?.cached_at || data.metadata?.generated_at || '';
@@ -350,7 +324,7 @@ function showCriativos(idx) {
 
   h += '<div class="card">';
   h += '<table class="detail-table"><thead><tr>';
-  h += '<th style="width:40%">Criativos editados</th><th style="width:8%">Pts</th><th style="width:16%">Primeira Edicao</th><th style="width:16%">Aprovacao</th><th style="width:12%">Status</th>';
+  h += '<th style="width:45%">Criativos editados</th><th style="width:8%">Pts</th><th style="width:18%">Primeira Edicao</th><th style="width:14%">Status</th>';
   h += '</tr></thead><tbody>';
 
   tasks.forEach(t => {
@@ -363,15 +337,6 @@ function showCriativos(idx) {
       const d = new Date(t.primeira_edicao + 'T12:00:00');
       if (!isNaN(d.getTime())) {
         peHtml = String(d.getDate()) + '/' + String(d.getMonth() + 1) + '/' + String(d.getFullYear()).slice(2);
-      }
-    }
-
-    // Format aprovacao date
-    let apHtml = '—';
-    if (t.aprovado_date) {
-      const da = new Date(t.aprovado_date + 'T12:00:00');
-      if (!isNaN(da.getTime())) {
-        apHtml = String(da.getDate()) + '/' + String(da.getMonth() + 1) + '/' + String(da.getFullYear()).slice(2);
       }
     }
 
@@ -394,7 +359,6 @@ function showCriativos(idx) {
     h += '<td>' + nameHtml + turboTag + '</td>';
     h += '<td style="text-align:center;font-weight:700;color:#10b981">' + t.pts + '</td>';
     h += '<td style="text-align:center;color:#94a3b8;font-size:11px">' + peHtml + '</td>';
-    h += '<td style="text-align:center;color:#94a3b8;font-size:11px">' + apHtml + '</td>';
     h += '<td style="text-align:center">' + statusHtml + '</td>';
     h += '</tr>';
   });
@@ -630,12 +594,143 @@ function statCard(value, label, color) {
   return '<div class="stat"><div class="stat-value" style="color:' + color + '">' + value + '</div><div class="stat-label">' + label + '</div></div>';
 }
 
+// ─── Old Bonus Model ─────────────────────────────────────────────────────────
+
+function renderOldBonusModel(editors, metaDiaria) {
+  const fixed = editors.filter(e => e.team === 'fixed').sort((a, b) => (a.rank || 99) - (b.rank || 99));
+  if (fixed.length === 0) return '';
+
+  let html = '<div class="card" style="border:1px solid #64748b;margin-top:16px">';
+  html += '<h3 style="color:#94a3b8;text-align:center">&#x1F4CB; Modelo Antigo de B&ocirc;nus (at&eacute; Jan/2026)</h3>';
+  html += '<div class="subtitle" style="text-align:center">Simula&ccedil;&atilde;o das 4 frentes do modelo anterior aplicada ao m&ecirc;s selecionado</div>';
+
+  // Old model explanation cards
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:12px">';
+
+  // 1. Ranking
+  html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F3C6; 1. RANKING MENSAL</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">&#x1F947; 1&ordm; = <span style="color:#10b981;font-weight:700">R$500</span> &middot; &#x1F948; 2&ordm; = <span style="color:#10b981;font-weight:700">R$250</span></div>';
+  html += '</div>';
+
+  // 2. TURBO
+  html += '<div style="background:#f9731610;border:1px solid #f9731633;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; 2. TURBO</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6"><span style="color:#f97316;font-weight:700">R$100/dia</span> que editou mais v&iacute;deos que a cota di&aacute;ria (' + metaDiaria + ')</div>';
+  html += '</div>';
+
+  // 3. FDS/Feriado
+  html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F4C5; 3. FDS / FERIADO</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Proj. BBB = <span style="color:#10b981;font-weight:700">R$35</span> &middot; Proj. TTCX = <span style="color:#10b981;font-weight:700">R$50</span></div>';
+  html += '</div>';
+
+  // 4. Cumulativo
+  html += '<div style="background:#10b98110;border:1px solid #10b98133;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:4px">&#x1F4CA; 4. CUMULATIVO</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">25 = <span style="color:#10b981;font-weight:700">R$250</span> &middot; 30 = <span style="color:#10b981;font-weight:700">R$500</span><br>35 = <span style="color:#10b981;font-weight:700">R$750</span> &middot; 40 = <span style="color:#10b981;font-weight:700">R$1000</span></div>';
+  html += '</div>';
+
+  html += '</div>';
+
+  // Table
+  html += '<table><thead><tr>';
+  html += '<th style="text-align:left">Editor</th><th>Criativos</th><th>Ranking</th><th>TURBO</th><th>FDS</th><th>Cumulativo</th><th style="color:#10b981">Total</th>';
+  html += '</tr></thead><tbody>';
+
+  let grandTotal = 0;
+
+  fixed.forEach(e => {
+    const rawCount = e.totals.raw_count || 0;
+
+    // 1. Ranking mensal de produtividade
+    const rankBonus = e.rank === 1 ? 500 : e.rank === 2 ? 250 : 0;
+
+    // 2. TURBO: R$100 por dia que editou mais que a cota diaria
+    let turboDays = 0;
+    if (e.daily) {
+      Object.values(e.daily).forEach(pts => {
+        if (pts > metaDiaria) turboDays++;
+      });
+    }
+    const turboBonus = turboDays * 100;
+
+    // 3. FDS/Feriado - reusa dados existentes
+    const fdsBonus = e.bonus?.fds || 0;
+
+    // 4. Bonus cumulativo por quantidade entregue
+    let cumulBonus = 0;
+    if (rawCount >= 40) cumulBonus = 1000;
+    else if (rawCount >= 35) cumulBonus = 750;
+    else if (rawCount >= 30) cumulBonus = 500;
+    else if (rawCount >= 25) cumulBonus = 250;
+
+    const total = rankBonus + turboBonus + fdsBonus + cumulBonus;
+    grandTotal += total;
+
+    const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : '';
+
+    html += '<tr>';
+    html += '<td>' + medal + e.name.split(' ')[0] + '</td>';
+    html += '<td style="font-weight:700">' + rawCount + '</td>';
+    html += '<td style="color:' + (rankBonus > 0 ? '#fbbf24' : '#475569') + ';font-weight:700">' + (rankBonus > 0 ? 'R$ ' + rankBonus : '&mdash;') + '</td>';
+    html += '<td style="color:' + (turboBonus > 0 ? '#f97316' : '#475569') + ';font-weight:700">' + (turboBonus > 0 ? turboDays + 'd &middot; R$ ' + turboBonus : '&mdash;') + '</td>';
+    html += '<td style="color:' + (fdsBonus > 0 ? '#fbbf24' : '#475569') + ';font-weight:700">' + (fdsBonus > 0 ? 'R$ ' + fdsBonus : '&mdash;') + '</td>';
+    html += '<td style="color:' + (cumulBonus > 0 ? '#10b981' : '#475569') + ';font-weight:700">' + (cumulBonus > 0 ? rawCount + ' criativos &middot; R$ ' + cumulBonus : '&mdash;') + '</td>';
+    html += '<td style="font-weight:800;color:#10b981">R$ ' + total + '</td>';
+    html += '</tr>';
+  });
+
+  // Grand total row
+  html += '<tr style="border-top:2px solid #334155">';
+  html += '<td colspan="6" style="text-align:right;font-weight:700;color:#94a3b8;padding-top:10px">Total Modelo Antigo:</td>';
+  html += '<td style="font-weight:800;color:#10b981;font-size:14px;padding-top:10px">R$ ' + grandTotal + '</td>';
+  html += '</tr>';
+
+  html += '</tbody></table></div>';
+
+  return html;
+}
+
 // ─── Data Loading ────────────────────────────────────────────────────────────
 
 async function loadMonth() {
   const picker = document.getElementById('monthPicker');
   if (picker.value) {
     await loadData(picker.value);
+  }
+}
+
+async function refreshData() {
+  if (!GAS_URL) return;
+  const btn = document.getElementById('refreshBtn');
+  const status = document.getElementById('refreshStatus');
+  const picker = document.getElementById('monthPicker');
+  const month = picker.value || null;
+
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.style.cursor = 'wait';
+  status.textContent = 'Recalculando...';
+  status.style.color = '#f97316';
+
+  try {
+    let url = GAS_URL + '?refresh=true';
+    if (month) url += '&month=' + month;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const data = await response.json();
+    render(data);
+    status.textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR');
+    status.style.color = '#10b981';
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+    status.style.color = '#ef4444';
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+    setTimeout(() => { status.textContent = ''; }, 8000);
   }
 }
 
