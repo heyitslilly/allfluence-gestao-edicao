@@ -140,6 +140,11 @@ function render(data) {
   html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; TURBO <span style="font-size:10px;color:#fb923c">+R$100/v&iacute;deo</span></div>';
   html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">+R$100 no dia que editar mais v&iacute;deos que a cota di&aacute;ria<br>Tag <span style="background:#f9731622;color:#f97316;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">turbo</span> no ClickUp</div>';
   html += '</div>';
+  // Cumulativo
+  html += '<div style="background:#10b98110;border:1px solid #10b98133;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:4px">&#x1F4CA; CUMULATIVO</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">25 pts = <span style="color:#10b981;font-weight:700">R$250</span> &middot; 30 pts = <span style="color:#10b981;font-weight:700">R$500</span><br>35 pts = <span style="color:#10b981;font-weight:700">R$750</span> &middot; 40 pts = <span style="color:#10b981;font-weight:700">R$1000</span></div>';
+  html += '</div>';
   // FDS/Feriado — até abril/2026 só feriado (aditivo BBB), a partir de maio inclui FDS
   var selectedMonth = data.metadata?.month || '';
   var isFdsEnabled = selectedMonth >= '2026-05';
@@ -203,7 +208,7 @@ function render(data) {
   html += '<div class="card">';
   html += '<h3>Pontos — Time Fixo</h3>';
   html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>' + fdsTitle + '</th><th>Bonus</th><th></th>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>Cumulativo</th><th>' + fdsTitle + '</th><th>Bonus</th><th></th>';
   html += '</tr></thead><tbody>';
 
   // Store fixed editor data for detail page
@@ -215,15 +220,18 @@ function render(data) {
   fixed.forEach((e, fi) => {
     const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : e.rank + 'o ';
     const turboCount = e.bonus?.turbo_days || 0;
-    const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1;' + turboCount + '</span>' : '<span style="color:#334155">—</span>';
+    const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1;' + turboCount + '</span>' : '<span style="color:#334155">\u2014</span>';
+    const cumulVal = e.bonus?.cumulativo || 0;
+    const cumulHtml = cumulVal > 0 ? '<span style="color:#10b981;font-weight:700">R$' + cumulVal + '</span>' : '<span style="color:#334155">\u2014</span>';
     const fdsVal = e.bonus?.fds || 0;
-    const fdsHtml = fdsVal > 0 ? '<span class="fds-badge">&#x1F4C5;R$' + fdsVal + '</span>' : '<span style="color:#334155">—</span>';
+    const fdsHtml = fdsVal > 0 ? '<span class="fds-badge">&#x1F4C5;R$' + fdsVal + '</span>' : '<span style="color:#334155">\u2014</span>';
     const bonusTotal = e.bonus?.total || 0;
 
     html += '<tr' + (e.rank <= 2 ? ' style="background:' + (e.rank === 1 ? '#fbbf2408' : '#94a3b808') + '"' : '') + '>';
     html += '<td>' + medal + (e.name.split(' ')[0]) + '</td>';
     html += '<td style="font-weight:800;color:#10b981">' + e.totals.pontos + '</td>';
     html += '<td>' + turboHtml + '</td>';
+    html += '<td>' + cumulHtml + '</td>';
     html += '<td>' + fdsHtml + '</td>';
     html += '<td style="font-weight:700;color:' + (bonusTotal > 0 ? '#10b981' : '#475569') + '">R$ ' + bonusTotal + '</td>';
     html += '<td><button class="btn-criativos" data-fixed-idx="' + fi + '" onclick="showCriativos(' + fi + ')">Criativos</button></td>';
