@@ -103,10 +103,18 @@ function render(data) {
   const fixed = data.editors.filter(e => e.team === 'fixed').sort((a, b) => (a.rank || 99) - (b.rank || 99));
   const freelas = data.editors.filter(e => e.team === 'freela');
   const iaEditors = data.editors.filter(e => e.team === 'ia');
-  const totalPontos = data.summary?.total_pontos || fixed.reduce((a, e) => a + e.totals.pontos, 0);
-  const totalEditors = fixed.length;
-  const avgPontos = totalEditors > 0 ? Math.round(totalPontos / totalEditors * 10) / 10 : 0;
-  const totalBonus = fixed.reduce((a, e) => a + (e.bonus?.total || 0), 0);
+  const totalEdicoes = fixed.reduce((a, e) => a + (e.totals.raw_count || 0), 0) + freelas.reduce((a, e) => a + (e.totals.raw_count || 0), 0);
+  const totalEdicoesFixo = fixed.reduce((a, e) => a + (e.totals.raw_count || 0), 0);
+  const avgEdicoesFixo = fixed.length > 0 ? Math.round(totalEdicoesFixo / fixed.length * 10) / 10 : 0;
+  const totalBonusFixos = fixed.reduce((a, e) => a + (e.bonus?.total || 0), 0);
+  const freelaCost = freelas.reduce((a, e) => a + (e.bonus?.freelaTotal || 0), 0);
+  const totalBonusGeral = totalBonusFixos + freelaCost;
+  const MONTHS_BR_UPPER = ['JANEIRO','FEVEREIRO','MAR\u00C7O','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+  var monthLabel = '';
+  if (data.metadata?.month) {
+    var _parts = data.metadata.month.split('-').map(Number);
+    monthLabel = MONTHS_BR_UPPER[_parts[1] - 1] || '';
+  }
   const metaDiaria = data.metadata?.meta_diaria || META_DIARIA;
   const turboThreshold = data.metadata?.turbo_threshold || TURBO_THRESHOLD;
 
@@ -152,14 +160,14 @@ function render(data) {
   // Stats
   const totalFds = fixed.reduce((a, e) => a + (e.bonus?.fds || 0), 0);
   html += '<div class="stats">';
-  html += statCard(totalPontos, 'Total Pontos', '#10b981');
-  html += statCard(avgPontos, 'Media/Editor', '#3b82f6');
-  html += statCard('R$ ' + totalBonus, 'Bonus Total', '#fbbf24');
-  if (totalFds > 0) html += statCard('R$ ' + totalFds, isFdsEnabled ? 'FDS/Feriado' : 'Feriado', '#fbbf24');
+  html += statCard(totalEdicoes, 'Total de Edi\u00E7\u00F5es', '#10b981');
+  html += statCard(avgEdicoesFixo, 'M\u00E9dia Edi\u00E7\u00F5es/Editor Fixo', '#3b82f6');
+  html += statCard('R$ ' + totalBonusFixos, 'B\u00F4nus Fixos', '#fbbf24');
   if (freelas.length > 0) {
-    const freelaCost = freelas.reduce((a, e) => a + (e.bonus?.freelaTotal || 0), 0);
-    html += statCard('R$ ' + freelaCost.toFixed(0), 'Custo Freelas', '#f97316');
+    html += statCard('R$ ' + freelaCost.toFixed(0), 'B\u00F4nus Freelas', '#f97316');
   }
+  html += statCard('R$ ' + totalBonusGeral.toFixed(0), 'Custo B\u00F4nus Total ' + monthLabel, '#10b981');
+  if (totalFds > 0) html += statCard('R$ ' + totalFds, isFdsEnabled ? 'FDS/Feriado' : 'Feriado', '#fbbf24');
   html += '</div>';
 
   // Daily chart
