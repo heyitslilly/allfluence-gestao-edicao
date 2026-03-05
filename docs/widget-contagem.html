@@ -848,7 +848,7 @@ function renderGastos(data) {
     }
 
     // Cost breakdown — subcategories
-    h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">';
+    h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:12px">';
     h += miniStatCard('B\u00F4nus Fixos', fmtBRL(p.costs.bonus_fixos), '#fbbf24');
     h += miniStatCard('Aditivos', fmtBRL(p.costs.aditivos), '#f97316');
     h += miniStatCard('Freelas', fmtBRL(p.costs.freelas), '#ef4444');
@@ -859,6 +859,7 @@ function renderGastos(data) {
     var subParts = [];
     if (c.ranking) subParts.push('Ranking: ' + fmtBRL(c.ranking));
     if (c.cumulativo) subParts.push('Cumulativo: ' + fmtBRL(c.cumulativo));
+    if (c.aditivo_fixo) subParts.push('Aditivo Fixo: ' + fmtBRL(c.aditivo_fixo));
     if (c.turbo) subParts.push('Turbo: ' + fmtBRL(c.turbo) + ' (' + (c.turbo_count || 0) + ' tasks)');
     if (c.fds) subParts.push('FDS/Feriado: ' + fmtBRL(c.fds));
     if (subParts.length > 0) {
@@ -872,13 +873,12 @@ function renderGastos(data) {
     if (detail.length > 0) {
       h += '<div style="margin-top:12px;overflow-x:auto">';
       h += '<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:6px">Discrimina\u00E7\u00E3o por editor</div>';
-      h += '<table style="width:100%;font-size:11px;border-collapse:collapse;min-width:480px">';
+      h += '<table style="width:100%;font-size:11px;border-collapse:collapse;min-width:540px">';
       h += '<thead><tr style="border-bottom:1px solid #334155">';
       h += '<th style="text-align:left;padding:4px 6px;color:#64748b">Editor</th>';
-      h += '<th style="text-align:center;padding:4px 6px;color:#64748b">Pts</th>';
-      h += '<th style="text-align:center;padding:4px 6px;color:#64748b">%</th>';
       h += '<th style="text-align:center;padding:4px 6px;color:#64748b">Rank</th>';
       h += '<th style="text-align:center;padding:4px 6px;color:#64748b">Cumul</th>';
+      h += '<th style="text-align:center;padding:4px 6px;color:#64748b">Adit.</th>';
       h += '<th style="text-align:center;padding:4px 6px;color:#64748b">Turbo</th>';
       h += '<th style="text-align:center;padding:4px 6px;color:#64748b">FDS</th>';
       h += '<th style="text-align:center;padding:4px 6px;color:#64748b">Freela</th>';
@@ -893,10 +893,9 @@ function renderGastos(data) {
           : '';
         h += '<tr style="border-bottom:1px solid #1e293b">';
         h += '<td style="padding:4px 6px">' + teamBadge + d.name.split(' ')[0] + '</td>';
-        h += '<td style="text-align:center;padding:4px 6px;color:#10b981">' + d.pontos + '</td>';
-        h += '<td style="text-align:center;padding:4px 6px;color:#64748b">' + d.ratio + '%</td>';
         h += '<td style="text-align:center;padding:4px 6px">' + (d.ranking ? fmtBRL(d.ranking) : '\u2014') + '</td>';
         h += '<td style="text-align:center;padding:4px 6px">' + (d.cumulativo ? fmtBRL(d.cumulativo) : '\u2014') + '</td>';
+        h += '<td style="text-align:center;padding:4px 6px">' + (d.aditivo_fixo ? fmtBRL(d.aditivo_fixo) : '\u2014') + '</td>';
         h += '<td style="text-align:center;padding:4px 6px">' + (d.turbo ? fmtBRL(d.turbo) : '\u2014') + '</td>';
         h += '<td style="text-align:center;padding:4px 6px">' + (d.fds ? fmtBRL(d.fds) : '\u2014') + '</td>';
         h += '<td style="text-align:center;padding:4px 6px">' + (d.freela ? fmtBRL(d.freela) : '\u2014') + '</td>';
@@ -906,7 +905,7 @@ function renderGastos(data) {
 
       // Total row
       h += '<tr style="border-top:2px solid #334155">';
-      h += '<td colspan="8" style="padding:4px 6px;font-weight:700;color:#94a3b8;text-align:right">Total</td>';
+      h += '<td colspan="7" style="padding:4px 6px;font-weight:700;color:#94a3b8;text-align:right">Total</td>';
       h += '<td style="text-align:right;padding:4px 6px;font-weight:800;color:#10b981">' + fmtBRL(sumTotal) + '</td>';
       h += '</tr>';
 
