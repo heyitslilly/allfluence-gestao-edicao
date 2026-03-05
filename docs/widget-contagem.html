@@ -214,7 +214,7 @@ function render(data) {
   // Store fixed editor data for detail page
   window._fixedEditorData = fixed.map(e => ({
     name: e.name, pontos: e.totals.pontos, raw_count: e.totals.raw_count,
-    tasks: e.tasks || [],
+    tasks: e.tasks || [], bonus: e.bonus || {},
   }));
 
   fixed.forEach((e, fi) => {
@@ -342,6 +342,18 @@ function showCriativos(idx) {
   h += '<button class="back-btn" onclick="hideCriativos()">&larr; Voltar</button>';
   h += '<h2>' + ed.name + '</h2>';
   h += '<div class="subtitle">Criativos editados &mdash; ' + monthLabel + ' &middot; ' + tasks.length + ' criativos &middot; ' + ed.pontos + ' pontos</div>';
+  var bonusTotal = ed.bonus?.total || 0;
+  if (bonusTotal > 0) {
+    h += '<div style="margin-top:6px;display:inline-block;background:#10b98118;border:1px solid #10b98144;border-radius:8px;padding:6px 14px">';
+    h += '<span style="font-size:11px;color:#94a3b8">B\u00F4nus Total:</span> <span style="font-size:16px;font-weight:800;color:#10b981">R$ ' + bonusTotal + '</span>';
+    var parts = [];
+    if (ed.bonus?.productivity) parts.push('Ranking R$' + ed.bonus.productivity);
+    if (ed.bonus?.turbo) parts.push('Turbo R$' + ed.bonus.turbo);
+    if (ed.bonus?.cumulativo) parts.push('Cumulativo R$' + ed.bonus.cumulativo);
+    if (ed.bonus?.fds) parts.push('Feriado R$' + ed.bonus.fds);
+    if (parts.length > 0) h += '<div style="font-size:9px;color:#64748b;margin-top:2px">' + parts.join(' + ') + '</div>';
+    h += '</div>';
+  }
   h += '</div>';
 
   h += '<div class="card">';
