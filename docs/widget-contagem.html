@@ -208,7 +208,7 @@ function render(data) {
   html += '<div class="card">';
   html += '<h3>Pontos — Time Fixo</h3>';
   html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>Cumulativo</th><th>' + fdsTitle + '</th><th>Bonus</th><th></th>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>Ranking</th><th>TURBO</th><th>Cumulativo</th><th>' + fdsTitle + '</th><th>Bonus</th><th></th>';
   html += '</tr></thead><tbody>';
 
   // Store fixed editor data for detail page
@@ -229,7 +229,10 @@ function render(data) {
 
     html += '<tr' + (e.rank <= 2 ? ' style="background:' + (e.rank === 1 ? '#fbbf2408' : '#94a3b808') + '"' : '') + '>';
     html += '<td>' + medal + (e.name.split(' ')[0]) + '</td>';
+    const rankVal = e.bonus?.productivity || 0;
+    const rankHtml = rankVal > 0 ? '<span style="color:#fbbf24;font-weight:700">R$' + rankVal + '</span>' : '<span style="color:#334155">\u2014</span>';
     html += '<td style="font-weight:800;color:#10b981">' + e.totals.pontos + '</td>';
+    html += '<td>' + rankHtml + '</td>';
     html += '<td>' + turboHtml + '</td>';
     html += '<td>' + cumulHtml + '</td>';
     html += '<td>' + fdsHtml + '</td>';
