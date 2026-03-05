@@ -308,8 +308,6 @@ function render(data) {
     html += '</div>';
   }
 
-  // Old Bonus Model (pre-Feb 2026)
-  html += renderOldBonusModel(data.editors, metaDiaria);
 
   // Meta
   const cachedAt = data.metadata?.cached_at || data.metadata?.generated_at || '';
@@ -616,104 +614,6 @@ function renderDailyChart(editors, month) {
 
 function statCard(value, label, color) {
   return '<div class="stat"><div class="stat-value" style="color:' + color + '">' + value + '</div><div class="stat-label">' + label + '</div></div>';
-}
-
-// ─── Old Bonus Model ─────────────────────────────────────────────────────────
-
-function renderOldBonusModel(editors, metaDiaria) {
-  const fixed = editors.filter(e => e.team === 'fixed').sort((a, b) => (a.rank || 99) - (b.rank || 99));
-  if (fixed.length === 0) return '';
-
-  let html = '<div class="card" style="border:1px solid #64748b;margin-top:16px">';
-  html += '<h3 style="color:#94a3b8;text-align:center">&#x1F4CB; Modelo Antigo de B&ocirc;nus (at&eacute; Jan/2026)</h3>';
-  html += '<div class="subtitle" style="text-align:center">Simula&ccedil;&atilde;o das 4 frentes do modelo anterior aplicada ao m&ecirc;s selecionado</div>';
-
-  // Old model explanation cards
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-bottom:12px">';
-
-  // 1. Ranking
-  html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F3C6; 1. RANKING MENSAL</div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">&#x1F947; 1&ordm; = <span style="color:#10b981;font-weight:700">R$500</span> &middot; &#x1F948; 2&ordm; = <span style="color:#10b981;font-weight:700">R$250</span></div>';
-  html += '</div>';
-
-  // 2. TURBO
-  html += '<div style="background:#f9731610;border:1px solid #f9731633;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; 2. TURBO</div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6"><span style="color:#f97316;font-weight:700">R$100/dia</span> que editou mais v&iacute;deos que a cota di&aacute;ria (' + metaDiaria + ')</div>';
-  html += '</div>';
-
-  // 3. FDS/Feriado
-  html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F4C5; 3. FDS / FERIADO</div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Proj. BBB = <span style="color:#10b981;font-weight:700">R$35</span> &middot; Proj. TTCX = <span style="color:#10b981;font-weight:700">R$50</span></div>';
-  html += '</div>';
-
-  // 4. Cumulativo
-  html += '<div style="background:#10b98110;border:1px solid #10b98133;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:4px">&#x1F4CA; 4. CUMULATIVO</div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">25 = <span style="color:#10b981;font-weight:700">R$250</span> &middot; 30 = <span style="color:#10b981;font-weight:700">R$500</span><br>35 = <span style="color:#10b981;font-weight:700">R$750</span> &middot; 40 = <span style="color:#10b981;font-weight:700">R$1000</span></div>';
-  html += '</div>';
-
-  html += '</div>';
-
-  // Table
-  html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Criativos</th><th>Ranking</th><th>TURBO</th><th>FDS</th><th>Cumulativo</th><th style="color:#10b981">Total</th>';
-  html += '</tr></thead><tbody>';
-
-  let grandTotal = 0;
-
-  fixed.forEach(e => {
-    const rawCount = e.totals.raw_count || 0;
-
-    // 1. Ranking mensal de produtividade
-    const rankBonus = e.rank === 1 ? 500 : e.rank === 2 ? 250 : 0;
-
-    // 2. TURBO: R$100 por dia que editou mais que a cota diaria
-    let turboDays = 0;
-    if (e.daily) {
-      Object.values(e.daily).forEach(pts => {
-        if (pts > metaDiaria) turboDays++;
-      });
-    }
-    const turboBonus = turboDays * 100;
-
-    // 3. FDS/Feriado - reusa dados existentes
-    const fdsBonus = e.bonus?.fds || 0;
-
-    // 4. Bonus cumulativo por quantidade entregue
-    let cumulBonus = 0;
-    if (rawCount >= 40) cumulBonus = 1000;
-    else if (rawCount >= 35) cumulBonus = 750;
-    else if (rawCount >= 30) cumulBonus = 500;
-    else if (rawCount >= 25) cumulBonus = 250;
-
-    const total = rankBonus + turboBonus + fdsBonus + cumulBonus;
-    grandTotal += total;
-
-    const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : '';
-
-    html += '<tr>';
-    html += '<td>' + medal + e.name.split(' ')[0] + '</td>';
-    html += '<td style="font-weight:700">' + rawCount + '</td>';
-    html += '<td style="color:' + (rankBonus > 0 ? '#fbbf24' : '#475569') + ';font-weight:700">' + (rankBonus > 0 ? 'R$ ' + rankBonus : '&mdash;') + '</td>';
-    html += '<td style="color:' + (turboBonus > 0 ? '#f97316' : '#475569') + ';font-weight:700">' + (turboBonus > 0 ? turboDays + 'd &middot; R$ ' + turboBonus : '&mdash;') + '</td>';
-    html += '<td style="color:' + (fdsBonus > 0 ? '#fbbf24' : '#475569') + ';font-weight:700">' + (fdsBonus > 0 ? 'R$ ' + fdsBonus : '&mdash;') + '</td>';
-    html += '<td style="color:' + (cumulBonus > 0 ? '#10b981' : '#475569') + ';font-weight:700">' + (cumulBonus > 0 ? rawCount + ' criativos &middot; R$ ' + cumulBonus : '&mdash;') + '</td>';
-    html += '<td style="font-weight:800;color:#10b981">R$ ' + total + '</td>';
-    html += '</tr>';
-  });
-
-  // Grand total row
-  html += '<tr style="border-top:2px solid #334155">';
-  html += '<td colspan="6" style="text-align:right;font-weight:700;color:#94a3b8;padding-top:10px">Total Modelo Antigo:</td>';
-  html += '<td style="font-weight:800;color:#10b981;font-size:14px;padding-top:10px">R$ ' + grandTotal + '</td>';
-  html += '</tr>';
-
-  html += '</tbody></table></div>';
-
-  return html;
 }
 
 // ─── Data Loading ────────────────────────────────────────────────────────────
