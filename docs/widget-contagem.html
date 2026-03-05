@@ -132,10 +132,15 @@ function render(data) {
   html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; TURBO <span style="font-size:10px;color:#fb923c">+R$100/v&iacute;deo</span></div>';
   html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">+R$100 no dia que editar mais v&iacute;deos que a cota di&aacute;ria<br>Tag <span style="background:#f9731622;color:#f97316;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">turbo</span> no ClickUp</div>';
   html += '</div>';
-  // FDS
+  // FDS/Feriado — até abril/2026 só feriado (aditivo BBB), a partir de maio inclui FDS
+  var selectedMonth = data.metadata?.month || '';
+  var isFdsEnabled = selectedMonth >= '2026-05';
+  var fdsTitle = isFdsEnabled ? 'FDS / FERIADO' : 'FERIADO';
+  var fdsTagsHtml = '<span style="background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">feriado edi&ccedil;&atilde;o</span>';
+  if (isFdsEnabled) fdsTagsHtml = '<span style="background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">fds edi&ccedil;&atilde;o</span> ou ' + fdsTagsHtml;
   html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
-  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F4C5; FDS / FERIADO</div>';
-  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Peso 1 = <span style="color:#10b981;font-weight:700">R$35</span> &middot; Peso 2 = <span style="color:#10b981;font-weight:700">R$50</span><br>Tag <span style="background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">fds edi&ccedil;&atilde;o</span> ou <span style="background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">feriado edi&ccedil;&atilde;o</span></div>';
+  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F4C5; ' + fdsTitle + '</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Peso 1 = <span style="color:#10b981;font-weight:700">R$35</span> &middot; Peso 2 = <span style="color:#10b981;font-weight:700">R$50</span><br>Tag ' + fdsTagsHtml + '</div>';
   html += '</div>';
   // Freelas
   html += '<div style="background:#f9731610;border:1px solid #f9731633;border-radius:8px;padding:10px 12px">';
@@ -150,7 +155,7 @@ function render(data) {
   html += statCard(totalPontos, 'Total Pontos', '#10b981');
   html += statCard(avgPontos, 'Media/Editor', '#3b82f6');
   html += statCard('R$ ' + totalBonus, 'Bonus Total', '#fbbf24');
-  if (totalFds > 0) html += statCard('R$ ' + totalFds, 'FDS/Feriado', '#fbbf24');
+  if (totalFds > 0) html += statCard('R$ ' + totalFds, isFdsEnabled ? 'FDS/Feriado' : 'Feriado', '#fbbf24');
   if (freelas.length > 0) {
     const freelaCost = freelas.reduce((a, e) => a + (e.bonus?.freelaTotal || 0), 0);
     html += statCard('R$ ' + freelaCost.toFixed(0), 'Custo Freelas', '#f97316');
@@ -190,7 +195,7 @@ function render(data) {
   html += '<div class="card">';
   html += '<h3>Pontos — Time Fixo</h3>';
   html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>FDS</th><th>Bonus</th><th></th>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>TURBO</th><th>' + fdsTitle + '</th><th>Bonus</th><th></th>';
   html += '</tr></thead><tbody>';
 
   // Store fixed editor data for detail page
