@@ -58,6 +58,16 @@
   .detail-table a { color:#60a5fa; text-decoration:none; }
   .detail-table a:hover { text-decoration:underline; }
   .status-pill { display:inline-block; padding:2px 8px; border-radius:4px; font-size:9px; font-weight:700; text-transform:uppercase; }
+  .tab-bar { display: flex; gap: 4px; margin-bottom: 12px; background: #1e293b; border-radius: 8px; padding: 4px; }
+  .tab-btn { flex: 1; padding: 8px 16px; border: none; border-radius: 6px; background: transparent; color: #94a3b8; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .tab-btn.active { background: #334155; color: #e2e8f0; }
+  .tab-btn:hover:not(.active) { color: #e2e8f0; }
+  .budget-bar { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; margin: 8px 0; }
+  .budget-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+  .project-card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid #334155; }
+  .mini-stat { background: #0f172a; border-radius: 8px; padding: 10px; text-align: center; }
+  .mini-stat-value { font-size: 16px; font-weight: 800; }
+  .mini-stat-label { font-size: 10px; color: #94a3b8; margin-top: 2px; }
   .loading { text-align: center; padding: 40px; color: #64748b; }
   .error { text-align: center; padding: 20px; color: #ef4444; background: #7f1d1d22; border-radius: 8px; }
   .meta { font-size: 11px; color: #64748b; text-align: center; margin-top: 8px; }
@@ -75,11 +85,16 @@
   <button id="refreshBtn" onclick="refreshData()" style="background:#1e293b;color:#f97316;border:1px solid #f9731644;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600;transition:all .15s" onmouseover="this.style.background='#f97316';this.style.color='#fff'" onmouseout="this.style.background='#1e293b';this.style.color='#f97316'">&#x1F504; Atualizar</button>
   <span id="refreshStatus" style="font-size:10px;color:#64748b"></span>
 </div>
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="pontos" onclick="switchTab('pontos')">Pontos</button>
+  <button class="tab-btn" data-tab="gastos" onclick="switchTab('gastos')">Gastos por Projeto</button>
+</div>
 <div id="main-content">
 <div id="app">
   <div class="loading" id="loading">Carregando dados...</div>
 </div>
 </div>
+<div id="gastos-content" style="display:none"></div>
 <div id="criativos-detail"></div>
 
 <script>
@@ -93,6 +108,7 @@ const TURBO_THRESHOLD = 8;
 // ─── Render ──────────────────────────────────────────────────────────────────
 
 function render(data) {
+  window._lastData = data;
   const app = document.getElementById('app');
 
   if (!data || !data.editors || data.editors.length === 0) {
@@ -316,6 +332,12 @@ function render(data) {
   app.innerHTML = html;
   initChartTooltip();
   initFreelaTooltip();
+
+  // Auto-update gastos tab if active
+  var gastosEl = document.getElementById('gastos-content');
+  if (gastosEl && gastosEl.style.display !== 'none') {
+    renderGastos(data);
+  }
 }
 
 function showCriativos(idx) {
@@ -626,6 +648,161 @@ function renderDailyChart(editors, month) {
 
 function statCard(value, label, color) {
   return '<div class="stat"><div class="stat-value" style="color:' + color + '">' + value + '</div><div class="stat-label">' + label + '</div></div>';
+}
+
+// ─── Project Budgets Config ──────────────────────────────────────────────────
+
+const PROJECT_BUDGETS = {
+  BBB: { type: 'pool', total: 30000, period: ['2026-01', '2026-04'], pastMonths: { '2026-01': 3780 } },
+  TTCX: { type: 'monthly', monthly: 5000 },
+};
+
+// ─── Tab System ─────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  var active = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
+  if (active) active.classList.add('active');
+  hideCriativos();
+
+  document.getElementById('main-content').style.display = tab === 'pontos' ? '' : 'none';
+  document.getElementById('gastos-content').style.display = tab === 'gastos' ? '' : 'none';
+
+  if (tab === 'gastos' && window._lastData) renderGastos(window._lastData);
+}
+
+function fmtBRL(n) {
+  return 'R$ ' + String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function miniStatCard(label, value, color) {
+  return '<div class="mini-stat"><div class="mini-stat-value" style="color:' + color + '">' + value + '</div><div class="mini-stat-label">' + label + '</div></div>';
+}
+
+function renderBudgetTracker(proj, currentSpent, month, cfg) {
+  var h = '';
+
+  if (cfg.type === 'pool') {
+    var pastTotal = 0;
+    Object.keys(cfg.pastMonths || {}).forEach(function(m) {
+      if (m < month) pastTotal += cfg.pastMonths[m];
+    });
+    var totalSpent = pastTotal + currentSpent;
+    var pct = Math.min(Math.round(totalSpent / cfg.total * 100), 100);
+    var remaining = cfg.total - totalSpent;
+    var barColor = pct > 90 ? '#ef4444' : pct > 70 ? '#f97316' : '#10b981';
+
+    h += '<div style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155">';
+    h += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px">';
+    h += '<span style="color:#94a3b8">Pool ' + cfg.period[0] + ' a ' + cfg.period[1] + '</span>';
+    h += '<span style="color:' + barColor + ';font-weight:700">' + pct + '% usado</span>';
+    h += '</div>';
+    h += '<div class="budget-bar"><div class="budget-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>';
+    h += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px">';
+    h += '<span style="color:#94a3b8">Gasto: <b style="color:#e2e8f0">' + fmtBRL(totalSpent) + '</b></span>';
+    h += '<span style="color:#94a3b8">Restante: <b style="color:' + (remaining < 0 ? '#ef4444' : '#10b981') + '">' + fmtBRL(remaining) + '</b></span>';
+    h += '</div>';
+
+    // Past months breakdown
+    var pastKeys = Object.keys(cfg.pastMonths || {}).filter(function(m) { return m < month; });
+    if (pastKeys.length > 0) {
+      h += '<div style="margin-top:8px;font-size:10px;color:#64748b">';
+      pastKeys.forEach(function(m) {
+        h += m + ': ' + fmtBRL(cfg.pastMonths[m]) + ' &middot; ';
+      });
+      h += month + ' (atual): ' + fmtBRL(currentSpent);
+      h += '</div>';
+    }
+    h += '</div>';
+
+  } else if (cfg.type === 'monthly') {
+    var pctM = Math.min(Math.round(currentSpent / cfg.monthly * 100), 100);
+    var remainingM = cfg.monthly - currentSpent;
+    var barColorM = pctM > 90 ? '#ef4444' : pctM > 70 ? '#f97316' : '#10b981';
+
+    h += '<div style="background:#0f172a;border-radius:8px;padding:12px;border:1px solid #334155">';
+    h += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:6px">';
+    h += '<span style="color:#94a3b8">Budget Mensal: ' + fmtBRL(cfg.monthly) + '</span>';
+    h += '<span style="color:' + barColorM + ';font-weight:700">' + pctM + '% usado</span>';
+    h += '</div>';
+    h += '<div class="budget-bar"><div class="budget-fill" style="width:' + pctM + '%;background:' + barColorM + '"></div></div>';
+    h += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px">';
+    h += '<span style="color:#94a3b8">Gasto: <b style="color:#e2e8f0">' + fmtBRL(currentSpent) + '</b></span>';
+    h += '<span style="color:#94a3b8">Restante: <b style="color:' + (remainingM < 0 ? '#ef4444' : '#10b981') + '">' + fmtBRL(remainingM) + '</b></span>';
+    h += '</div>';
+    h += '</div>';
+  }
+
+  return h;
+}
+
+function renderGastos(data) {
+  var container = document.getElementById('gastos-content');
+  var ps = data.projects_summary;
+  if (!ps || Object.keys(ps).length === 0) {
+    container.innerHTML = '<div class="error">Nenhum dado de projetos encontrado. Execute a API com refresh para gerar.</div>';
+    return;
+  }
+
+  var month = data.metadata && data.metadata.month ? data.metadata.month : '';
+  var MONTHS_BR_UPPER = ['JANEIRO','FEVEREIRO','MAR\u00C7O','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
+  var monthLabel = '';
+  if (month) {
+    var parts = month.split('-').map(Number);
+    monthLabel = MONTHS_BR_UPPER[parts[1] - 1] || '';
+  }
+
+  var totalGeral = 0;
+  Object.values(ps).forEach(function(p) { totalGeral += p.costs.total; });
+
+  var projKeys = Object.keys(ps).sort(function(a, b) { return ps[b].costs.total - ps[a].costs.total; });
+  var projColors = { BBB: '#3b82f6', TTCX: '#8b5cf6', Outros: '#64748b' };
+
+  var h = '';
+
+  // Header
+  h += '<div style="margin-bottom:12px">';
+  h += '<h2>Gastos por Projeto</h2>';
+  h += '<div class="subtitle">M\u00EAs: ' + (month || '\u2014') + ' ' + monthLabel + '</div>';
+  h += '</div>';
+
+  // Stats resumo
+  h += '<div class="stats">';
+  projKeys.forEach(function(proj) {
+    var color = projColors[proj] || '#64748b';
+    h += miniStatCard(proj, fmtBRL(ps[proj].costs.total), color);
+  });
+  h += miniStatCard('Total Geral', fmtBRL(totalGeral), '#10b981');
+  h += '</div>';
+
+  // Card por projeto
+  projKeys.forEach(function(proj) {
+    var p = ps[proj];
+    var cfg = PROJECT_BUDGETS[proj];
+    var color = projColors[proj] || '#64748b';
+
+    h += '<div class="project-card">';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    h += '<h3 style="margin:0;font-size:16px;color:' + color + '">' + proj + '</h3>';
+    h += '<div style="font-size:11px;color:#94a3b8">' + p.tasks_count + ' criativos &middot; ' + p.total_pontos + ' pts</div>';
+    h += '</div>';
+
+    // Budget tracker
+    if (cfg) {
+      h += renderBudgetTracker(proj, p.costs.total, month, cfg);
+    }
+
+    // Cost breakdown
+    h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px">';
+    h += miniStatCard('B\u00F4nus Fixos', fmtBRL(p.costs.bonus_fixos), '#fbbf24');
+    h += miniStatCard('Aditivos', fmtBRL(p.costs.aditivos), '#f97316');
+    h += miniStatCard('Freelas', fmtBRL(p.costs.freelas), '#ef4444');
+    h += '</div>';
+
+    h += '</div>';
+  });
+
+  container.innerHTML = h;
 }
 
 // ─── Data Loading ────────────────────────────────────────────────────────────
