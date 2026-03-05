@@ -169,9 +169,9 @@ function render(data) {
   html += statCard(avgEdicoesFixo, 'M\u00E9dia Edi\u00E7\u00F5es/Editor Fixo', '#3b82f6');
   html += statCard('R$ ' + totalBonusFixos, 'B\u00F4nus Fixos', '#fbbf24');
   if (freelas.length > 0) {
-    html += statCard('R$ ' + freelaCost.toFixed(0), 'B\u00F4nus Freelas', '#f97316');
+    html += statCard('R$ ' + freelaCost.toFixed(0), 'Custo Freelas', '#f97316');
   }
-  html += statCard('R$ ' + totalBonusGeral.toFixed(0), 'Custo B\u00F4nus Total ' + monthLabel, '#10b981');
+  html += '<div class="stat"><div class="stat-value" style="color:#10b981">R$ ' + totalBonusGeral.toFixed(0) + '</div><div class="stat-label">Custo Total ' + monthLabel + '</div><div style="font-size:9px;color:#64748b;margin-top:2px">B\u00F4nus Fixos + Freelas</div></div>';
   if (totalFds > 0) html += statCard('R$ ' + totalFds, isFdsEnabled ? 'FDS/Feriado' : 'Feriado', '#fbbf24');
   html += '</div>';
 
