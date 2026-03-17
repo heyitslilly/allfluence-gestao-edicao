@@ -114,7 +114,39 @@ function render(data) {
   html += '<div class="subtitle">M\u00EAs: ' + (data.metadata?.month || '\u2014') + ' &middot; Meta: ' + metaDiaria + ' pts/dia</div>';
   html += '</div>';
 
-  // Stats — apenas contagens e pontos
+  // Bonus explanation
+  var selectedMonth = data.metadata?.month || '';
+  var isFdsEnabled = selectedMonth >= '2026-05';
+  var fdsTitle = isFdsEnabled ? 'FDS / FERIADO' : 'FERIADO';
+  var fdsTagsHtml = '<span style="background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">feriado edi\u00E7\u00E3o</span>';
+  if (isFdsEnabled) fdsTagsHtml = '<span style="background:#fbbf2422;color:#fbbf24;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">fds edi\u00E7\u00E3o</span> ou ' + fdsTagsHtml;
+
+  html += '<div class="card" style="border:1px solid #334155;padding:14px 16px;margin-bottom:12px">';
+  html += '<div style="font-weight:800;color:#e2e8f0;font-size:13px;margin-bottom:10px;text-align:center">&#x1F3AF; Como funcionam os b\u00F4nus</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px">';
+  html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F3C6; PRODUTIVIDADE</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">&#x1F947; 1\u00BA lugar = <span style="color:#10b981;font-weight:700">R$500</span><br>&#x1F948; 2\u00BA lugar = <span style="color:#10b981;font-weight:700">R$250</span></div>';
+  html += '</div>';
+  html += '<div style="background:#f9731610;border:1px solid #f9731633;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x26A1; TURBO <span style="font-size:10px;color:#fb923c">+R$100/v\u00EDdeo</span></div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">+R$100 no dia que editar mais v\u00EDdeos que a cota di\u00E1ria<br>Tag <span style="background:#f9731622;color:#f97316;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700">turbo</span> no ClickUp</div>';
+  html += '</div>';
+  html += '<div style="background:#10b98110;border:1px solid #10b98133;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#10b981;margin-bottom:4px">&#x1F4CA; CUMULATIVO</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">50 pts = <span style="color:#10b981;font-weight:700">R$250</span> &middot; 60 pts = <span style="color:#10b981;font-weight:700">R$500</span><br>70 pts = <span style="color:#10b981;font-weight:700">R$750</span> &middot; 80 pts = <span style="color:#10b981;font-weight:700">R$1000</span></div>';
+  html += '</div>';
+  html += '<div style="background:#fbbf2410;border:1px solid #fbbf2433;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#fbbf24;margin-bottom:4px">&#x1F4C5; ' + fdsTitle + '</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Peso 1 = <span style="color:#10b981;font-weight:700">R$35</span> &middot; Peso 2 = <span style="color:#10b981;font-weight:700">R$50</span><br>Tag ' + fdsTagsHtml + '</div>';
+  html += '</div>';
+  html += '<div style="background:#f9731610;border:1px solid #f9731633;border-radius:8px;padding:10px 12px">';
+  html += '<div style="font-size:12px;font-weight:800;color:#f97316;margin-bottom:4px">&#x1F4B0; FREELAS</div>';
+  html += '<div style="font-size:11px;color:#cbd5e1;line-height:1.6">Peso 1 = <span style="color:#10b981;font-weight:700">R$35</span> &middot; Peso 2 = <span style="color:#10b981;font-weight:700">R$50</span><br>Por criativo editado &#x1F3AC;</div>';
+  html += '</div>';
+  html += '</div></div>';
+
+  // Stats
   html += '<div class="stats">';
   html += statCard(totalEdicoes, 'Total de Edi\u00E7\u00F5es', '#10b981');
   html += statCard(totalPontos, 'Total de Pontos', '#3b82f6');
@@ -149,11 +181,11 @@ function render(data) {
     html += '</div></div>';
   }
 
-  // Ranking Table — apenas pontos e contagens
+  // Ranking Table
   html += '<div class="card">';
   html += '<h3>Pontos \u2014 Time Fixo</h3>';
   html += '<table><thead><tr>';
-  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>Criativos</th><th>TURBO</th><th></th>';
+  html += '<th style="text-align:left">Editor</th><th>Pts</th><th>Ranking</th><th>TURBO</th><th>Cumulativo</th><th>' + fdsTitle + '</th><th></th>';
   html += '</tr></thead><tbody>';
 
   // Store fixed editor data for detail page
@@ -164,14 +196,45 @@ function render(data) {
 
   fixed.forEach((e, fi) => {
     const medal = e.rank === 1 ? '&#x1F947; ' : e.rank === 2 ? '&#x1F948; ' : e.rank === 3 ? '&#x1F949; ' : e.rank + 'o ';
+
+    // Ranking: medal badges instead of R$
+    const rankBadgeColors = { 1: '#fbbf24', 2: '#94a3b8' };
+    const rankBadgeEmojis = { 1: '&#x1F947;', 2: '&#x1F948;' };
+    let rankHtml;
+    if (e.rank <= 2) {
+      rankHtml = '<span style="display:inline-block;background:' + rankBadgeColors[e.rank] + '22;color:' + rankBadgeColors[e.rank] + ';padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">' + rankBadgeEmojis[e.rank] + ' ' + e.rank + '\u00BA</span>';
+    } else {
+      rankHtml = '<span style="color:#334155">\u2014</span>';
+    }
+
+    // Turbo: count badge
     const turboCount = e.bonus?.turbo_days || 0;
-    const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1;' + turboCount + ' vid</span>' : '<span style="color:#334155">\u2014</span>';
+    const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1; ' + turboCount + '</span>' : '<span style="color:#334155">\u2014</span>';
+
+    // Cumulativo: show threshold reached as pts badge
+    const cumulVal = e.bonus?.cumulativo || 0;
+    let cumulHtml;
+    if (cumulVal > 0) {
+      // Find which threshold was reached
+      const thresholds = [{ pts: 80, val: 1000 }, { pts: 70, val: 750 }, { pts: 60, val: 500 }, { pts: 50, val: 250 }];
+      const reached = thresholds.find(t => e.totals.pontos >= t.pts);
+      const ptsLabel = reached ? reached.pts + 'pts' : '';
+      cumulHtml = '<span style="display:inline-block;background:#10b98122;color:#10b981;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">&#x1F4CA; ' + ptsLabel + '</span>';
+    } else {
+      cumulHtml = '<span style="color:#334155">\u2014</span>';
+    }
+
+    // Feriado: count badge
+    const fdsCount = e.bonus?.fds_count || 0;
+    const fdsHtml = fdsCount > 0 ? '<span class="fds-badge">&#x1F4C5; ' + fdsCount + '</span>' : '<span style="color:#334155">\u2014</span>';
 
     html += '<tr' + (e.rank <= 2 ? ' style="background:' + (e.rank === 1 ? '#fbbf2408' : '#94a3b808') + '"' : '') + '>';
     html += '<td>' + medal + (e.name.split(' ')[0]) + '</td>';
     html += '<td style="font-weight:800;color:#10b981">' + e.totals.pontos + '</td>';
-    html += '<td>' + e.totals.raw_count + '</td>';
+    html += '<td>' + rankHtml + '</td>';
     html += '<td>' + turboHtml + '</td>';
+    html += '<td>' + cumulHtml + '</td>';
+    html += '<td>' + fdsHtml + '</td>';
     html += '<td><button class="btn-criativos" onclick="showCriativos(' + fi + ')">Criativos</button></td>';
     html += '</tr>';
   });
