@@ -750,3 +750,97 @@ function forceRefresh() {
   const report = videoCounterMain();
   Logger.log(JSON.stringify(report.summary, null, 2));
 }
+
+/**
+ * Diagnóstico — roda manualmente para entender dados faltantes.
+ * Mostra quantas tasks existem, quantas têm "Primeira Edição", quantas têm "Editor", etc.
+ * Execute: selecione diagnoseMonth no editor e clique Run.
+ */
+function diagnoseMonth() {
+  const month = '2026-02'; // ← mude aqui para o mês desejado
+  const dateRange = getMonthRange_(month);
+
+  const lists = [
+    { id: CONFIG.LIST_IDS.producao, name: 'Produção de Criativos' },
+    { id: CONFIG.LIST_IDS.filaFixo, name: 'Fila de Edição (fixo)' },
+    { id: CONFIG.LIST_IDS.filaFreelas, name: 'Fila de Edição FREELAS' },
+  ];
+
+  let grandTotal = 0;
+  let grandWithPE = 0;
+  let grandInRange = 0;
+  let grandWithEditor = 0;
+  let grandWithPontos = 0;
+  const fieldNames = {};
+
+  lists.forEach(list => {
+    Logger.log('\n━━━ ' + list.name + ' (ID: ' + list.id + ') ━━━');
+    let page = 0;
+    let total = 0;
+    let withPE = 0;
+    let peInRange = 0;
+    let withEditor = 0;
+    let withPontos = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const tasks = getTasks_(list.id, page);
+      if (tasks.length === 0) break;
+      total += tasks.length;
+
+      tasks.forEach(t => {
+        // Catalog all custom field names (first page only)
+        if (page === 0 && t.custom_fields) {
+          t.custom_fields.forEach(cf => { fieldNames[cf.name] = (fieldNames[cf.name] || 0) + 1; });
+        }
+
+        const pe = getPrimeiraEdicao_(t);
+        if (pe) {
+          withPE++;
+          const ts = pe.getTime();
+          if (ts >= dateRange.start && ts <= dateRange.end) {
+            peInRange++;
+            const editors = extractEditors_(t);
+            if (editors.length > 0) withEditor++;
+            const pontos = getPontos_(t);
+            if (pontos !== null) withPontos++;
+          }
+        }
+      });
+
+      page++;
+      if (tasks.length < 100) hasMore = false;
+      if (page > 80) { Logger.log('  ⚠️ Stopped at page 80'); break; }
+    }
+
+    Logger.log('  Total tasks na lista: ' + total + ' (' + page + ' pages)');
+    Logger.log('  Com "Primeira Edição": ' + withPE);
+    Logger.log('  "Primeira Edição" em ' + month + ': ' + peInRange);
+    Logger.log('  Com Editor (no range): ' + withEditor);
+    Logger.log('  Com Pontos (no range): ' + withPontos);
+    Logger.log('  SEM "Primeira Edição": ' + (total - withPE));
+
+    grandTotal += total;
+    grandWithPE += withPE;
+    grandInRange += peInRange;
+    grandWithEditor += withEditor;
+    grandWithPontos += withPontos;
+  });
+
+  Logger.log('\n━━━ RESUMO GERAL ━━━');
+  Logger.log('Total tasks (todas as listas): ' + grandTotal);
+  Logger.log('Com "Primeira Edição": ' + grandWithPE);
+  Logger.log('"Primeira Edição" em ' + month + ': ' + grandInRange);
+  Logger.log('Com Editor (no range): ' + grandWithEditor);
+  Logger.log('Com Pontos (no range): ' + grandWithPontos);
+  Logger.log('Perdas:');
+  Logger.log('  Sem "Primeira Edição": ' + (grandTotal - grandWithPE) + ' tasks ignoradas');
+  Logger.log('  Fora do range ' + month + ': ' + (grandWithPE - grandInRange) + ' tasks (outros meses)');
+  Logger.log('  Sem Editor: ' + (grandInRange - grandWithEditor) + ' tasks sem crédito');
+  Logger.log('  Sem Pontos: ' + (grandInRange - grandWithPontos) + ' tasks sem peso');
+
+  Logger.log('\n━━━ CAMPOS CUSTOM ENCONTRADOS (amostra) ━━━');
+  Object.keys(fieldNames).sort().forEach(name => {
+    Logger.log('  "' + name + '" — aparece em ' + fieldNames[name] + ' tasks');
+  });
+}
