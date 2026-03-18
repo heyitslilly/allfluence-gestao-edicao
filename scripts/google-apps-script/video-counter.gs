@@ -111,10 +111,12 @@ function clickupGet_(endpoint) {
 function getTasks_(listId, page, dateRange) {
   let url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
   if (dateRange) {
-    // Only fetch tasks updated within the month window (± 15 days buffer)
-    const buffer = 15 * 24 * 60 * 60 * 1000;
-    url += '&date_updated_gt=' + (dateRange.start - buffer);
-    url += '&date_updated_lt=' + (dateRange.end + buffer);
+    // Use date_created range instead of date_updated to avoid missing tasks
+    // that were edited after the month window. Buffer of 5 days on each side
+    // covers timezone edge cases without pulling too many irrelevant tasks.
+    const buffer = 5 * 24 * 60 * 60 * 1000;
+    url += '&date_created_gt=' + (dateRange.start - buffer);
+    url += '&date_created_lt=' + (dateRange.end + buffer);
   }
   const data = clickupGet_(url);
   return data.tasks || [];
@@ -312,8 +314,11 @@ function fetchAllTasks_(listId, dateRange) {
     page++;
     if (tasks.length < 100) hasMore = false;
 
-    // GAS safety: avoid timeout on huge lists
-    if (page > 20) { hasMore = false; break; }
+    // GAS safety: avoid timeout on huge lists (50 pages = 5000 tasks max)
+    if (page > 50) {
+      Logger.log('WARNING: Pagination limit reached at page ' + page + '. Some tasks may be missing.');
+      hasMore = false; break;
+    }
   }
 
   return all;
@@ -691,28 +696,48 @@ function doGet(e) {
   output.setMimeType(ContentService.MimeType.JSON);
 
   const requestedMonth = e && e.parameter && e.parameter.month ? e.parameter.month : null;
+  const forceRefresh = e && e.parameter && e.parameter.refresh === 'true';
   const cache = PropertiesService.getScriptProperties();
 
+  // Cache TTL: current month = 6h, past months = 24h
+  const CURRENT_MONTH_TTL = 6 * 60 * 60 * 1000;
+  const PAST_MONTH_TTL = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const currentMonth = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
+
   if (requestedMonth) {
-    // Specific month requested — check cache or generate
     const cacheKey = CONFIG.CACHE_KEY + '_' + requestedMonth;
+    const tsKey = cacheKey + '_TS';
     const cached = cache.getProperty(cacheKey);
-    if (cached) {
+    const cachedTs = cache.getProperty(tsKey);
+    const ttl = requestedMonth === currentMonth ? CURRENT_MONTH_TTL : PAST_MONTH_TTL;
+    const isExpired = !cachedTs || (now.getTime() - new Date(cachedTs).getTime()) > ttl;
+
+    if (cached && !forceRefresh && !isExpired) {
       const data = JSON.parse(cached);
-      data.metadata.cached_at = cache.getProperty(cacheKey + '_TS') || 'unknown';
+      data.metadata.cached_at = cachedTs || 'unknown';
+      data.metadata.cache_ttl_hours = ttl / (60 * 60 * 1000);
       output.setContent(JSON.stringify(data));
     } else {
+      Logger.log('doGet: Regenerating data for ' + requestedMonth +
+        (forceRefresh ? ' (forced)' : isExpired ? ' (expired)' : ' (no cache)'));
       const report = videoCounterMain(requestedMonth);
+      const tsNow = new Date().toISOString();
       cache.setProperty(cacheKey, JSON.stringify(report));
-      cache.setProperty(cacheKey + '_TS', new Date().toISOString());
+      cache.setProperty(tsKey, tsNow);
+      report.metadata.cached_at = tsNow;
+      report.metadata.cache_ttl_hours = ttl / (60 * 60 * 1000);
       output.setContent(JSON.stringify(report));
     }
   } else {
-    // Default: current month (cached)
+    // Default: current month
     const cached = cache.getProperty(CONFIG.CACHE_KEY);
-    if (cached) {
+    const cachedTs = cache.getProperty(CONFIG.CACHE_KEY + '_TIMESTAMP');
+    const isExpired = !cachedTs || (now.getTime() - new Date(cachedTs).getTime()) > CURRENT_MONTH_TTL;
+
+    if (cached && !forceRefresh && !isExpired) {
       const data = JSON.parse(cached);
-      data.metadata.cached_at = cache.getProperty(CONFIG.CACHE_KEY + '_TIMESTAMP') || 'unknown';
+      data.metadata.cached_at = cachedTs || 'unknown';
       output.setContent(JSON.stringify(data));
     } else {
       const report = videoCounterMain();
