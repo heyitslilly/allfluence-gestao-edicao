@@ -108,16 +108,11 @@ function clickupGet_(endpoint) {
   return JSON.parse(response.getContentText());
 }
 
-function getTasks_(listId, page, dateRange) {
-  let url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
-  if (dateRange) {
-    // Use date_created range instead of date_updated to avoid missing tasks
-    // that were edited after the month window. Buffer of 5 days on each side
-    // covers timezone edge cases without pulling too many irrelevant tasks.
-    const buffer = 5 * 24 * 60 * 60 * 1000;
-    url += '&date_created_gt=' + (dateRange.start - buffer);
-    url += '&date_created_lt=' + (dateRange.end + buffer);
-  }
+function getTasks_(listId, page) {
+  // No date filter at API level — fetchAllTasks_ filters by "Primeira Edição" field.
+  // API date filters (date_updated/date_created) miss tasks created or updated
+  // outside the month window, causing incomplete data.
+  const url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
   const data = clickupGet_(url);
   return data.tasks || [];
 }
@@ -299,7 +294,7 @@ function fetchAllTasks_(listId, dateRange) {
   let hasMore = true;
 
   while (hasMore) {
-    const tasks = getTasks_(listId, page, dateRange);
+    const tasks = getTasks_(listId, page);
     Logger.log('  Page ' + page + ': ' + tasks.length + ' tasks');
     if (tasks.length === 0) { hasMore = false; break; }
 
