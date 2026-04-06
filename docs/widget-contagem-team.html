@@ -211,14 +211,16 @@ function render(data) {
     const turboCount = e.bonus?.turbo_days || 0;
     const turboHtml = turboCount > 0 ? '<span class="turbo-badge">&#x26A1; ' + turboCount + '</span>' : '<span style="color:#334155">\u2014</span>';
 
-    // Cumulativo: show threshold reached as pts badge
-    const cumulVal = e.bonus?.cumulativo || 0;
+    // Cumulativo: calcular pelo total de pontos do editor
+    const cumulThresholds = [{ pts: 80, val: 1000 }, { pts: 70, val: 750 }, { pts: 60, val: 500 }, { pts: 50, val: 250 }];
+    const cumulReached = cumulThresholds.find(t => e.totals.pontos >= t.pts);
+    const cumulVal = cumulReached ? cumulReached.val : 0;
+    // Inject cumulativo into bonus for detail page
+    if (!e.bonus) e.bonus = {};
+    e.bonus.cumulativo = cumulVal;
     let cumulHtml;
     if (cumulVal > 0) {
-      // Find which threshold was reached
-      const thresholds = [{ pts: 80, val: 1000 }, { pts: 70, val: 750 }, { pts: 60, val: 500 }, { pts: 50, val: 250 }];
-      const reached = thresholds.find(t => e.totals.pontos >= t.pts);
-      const ptsLabel = reached ? reached.pts + 'pts' : '';
+      const ptsLabel = cumulReached.pts + 'pts';
       cumulHtml = '<span style="display:inline-block;background:#10b98122;color:#10b981;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700">&#x1F4CA; ' + ptsLabel + '</span>';
     } else {
       cumulHtml = '<span style="color:#334155">\u2014</span>';
@@ -320,14 +322,18 @@ function showCriativos(idx) {
   h += '<div class="subtitle">Criativos editados \u2014 ' + monthLabel + ' &middot; ' + tasks.length + ' criativos &middot; ' + ed.pontos + ' pontos</div>';
 
   // Bonus breakdown — valores em R$ visíveis apenas nesta página individual
-  var bonusTotal = ed.bonus?.total || 0;
+  // Recalculate cumulativo for detail page (may not come from GAS)
+  var cumulThresholds = [{ pts: 80, val: 1000 }, { pts: 70, val: 750 }, { pts: 60, val: 500 }, { pts: 50, val: 250 }];
+  var cumulReached = cumulThresholds.find(function(t) { return ed.pontos >= t.pts; });
+  var cumulBonus = cumulReached ? cumulReached.val : 0;
+  var bonusTotal = (ed.bonus?.productivity || 0) + (ed.bonus?.turbo || 0) + cumulBonus + (ed.bonus?.fds || 0);
   if (bonusTotal > 0) {
     h += '<div style="margin-top:6px;display:inline-block;background:#10b98118;border:1px solid #10b98144;border-radius:8px;padding:6px 14px">';
     h += '<span style="font-size:11px;color:#94a3b8">B\u00F4nus Total:</span> <span style="font-size:16px;font-weight:800;color:#10b981">R$ ' + bonusTotal + '</span>';
     var parts = [];
     if (ed.bonus?.productivity) parts.push('Ranking R$' + ed.bonus.productivity);
     if (ed.bonus?.turbo) parts.push('Turbo R$' + ed.bonus.turbo);
-    if (ed.bonus?.cumulativo) parts.push('Cumulativo R$' + ed.bonus.cumulativo);
+    if (cumulBonus > 0) parts.push('Cumulativo R$' + cumulBonus);
     if (ed.bonus?.fds) parts.push('Feriado R$' + ed.bonus.fds);
     if (parts.length > 0) h += '<div style="font-size:9px;color:#64748b;margin-top:2px">' + parts.join(' + ') + '</div>';
     h += '</div>';

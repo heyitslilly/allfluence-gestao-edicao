@@ -25,11 +25,10 @@
  * ║  ⚡ TURBO  +R$100 por vídeo (Time Fixo)                        ║
  * ║     Em qualquer dia que o editor fizer mais de 8 pontos.       ║
  * ║     Identificado pela tag "turbo" 🏷️ no ClickUp.              ║
- * ║     (Futuro: cálculo automático por 8+ pts/dia)                ║
  * ║                                                                ║
- * ║  ✨ TURBINHO  +R$10 por vídeo (Time Fixo)                      ║
- * ║     Criativo que passou por APROVADO 👌 sem ter passado por   ║
- * ║     "para ajustar" ou "para ajustar cliente".                  ║
+ * ║  📊 CUMULATIVO (Time Fixo)                                     ║
+ * ║     50 pts = R$ 250 · 60 pts = R$ 500                         ║
+ * ║     70 pts = R$ 750 · 80 pts = R$ 1.000                       ║
  * ║                                                                ║
  * ║  📅 FDS / FERIADO (Time Fixo)                                  ║
  * ║     Peso 1 ─────────────────────────────────────── R$ 35       ║
@@ -60,16 +59,20 @@ const CONFIG = {
     ],
     metaDiaria: 6, // meta mínima diária: 6 pontos
     turbo: { value: 100, threshold: 8, tag: 'turbo' }, // TURBO: tag "turbo" (+R$100/vid)
-    turbinho: { value: 10 }, // R$10 por criativo sem ajuste
+    cumulativo: [
+      { min: 80, value: 1000 },
+      { min: 70, value: 750 },
+      { min: 60, value: 500 },
+      { min: 50, value: 250 },
+    ],
     fds: { perTask: { 1: 35, 2: 50 }, tags: ['fds edição', 'feriado edição'] },
-    ajusteStatuses: ['para ajustar', 'para ajustar cliente'],
     freelaPerTask: { 1: 35, 2: 50 },
   },
   // Fallback weight map when "Pontos" field is empty
   WEIGHT_MAP: {
     bbb: 1, symphony: 1, ttcx: 2, gov: 2, motion: 4, longform: 5, clp: 1,
   },
-  // Time fixo — apenas esses editores recebem TURBO e Turbinho
+  // Time fixo — apenas esses editores recebem TURBO e Cumulativo
   TIME_FIXO: [
     'pedro ximenes', 'lílian elen', 'lilian elen',
     'rafael nóbrega', 'rafael nobrega',
@@ -239,7 +242,7 @@ function extractEditors_(task) {
   return [];
 }
 
-// ─── FDS & Turbinho Helpers ──────────────────────────────────────────────────
+// ─── FDS & TURBO Helpers ─────────────────────────────────────────────────────
 
 function isFdsTask_(task) {
   if (!task.tags || !Array.isArray(task.tags)) return false;
@@ -256,22 +259,6 @@ function isTurboTask_(task) {
   });
 }
 
-function getTimeInStatus_(taskId) {
-  try {
-    return clickupGet_('/task/' + taskId + '/time_in_status');
-  } catch (e) {
-    Logger.log('Error getting status history for ' + taskId + ': ' + e.message);
-    return null;
-  }
-}
-
-function hadAjuste_(taskId) {
-  var data = getTimeInStatus_(taskId);
-  if (!data || !data.status_history) return false;
-  return data.status_history.some(function(s) {
-    return CONFIG.BONUS.ajusteStatuses.indexOf((s.status || '').toLowerCase()) !== -1;
-  });
-}
 
 // ─── Core Logic ──────────────────────────────────────────────────────────────
 
@@ -358,7 +345,7 @@ function calculatePontos_(tasks) {
         ed.daily[dateStr] = (ed.daily[dateStr] || 0) + pts;
       }
 
-      // Track task IDs for turbinho + task weights for freela bonus
+      // Track task IDs + task weights for freela bonus
       if (!editorTaskIds[editor.id]) editorTaskIds[editor.id] = [];
       editorTaskIds[editor.id].push(task.id);
       if (!editorTaskWeights[editor.id]) editorTaskWeights[editor.id] = [];
@@ -441,97 +428,26 @@ function calculateTurbo_(editors, editorTurboTasks) {
   return turboDays;
 }
 
-function getBulkTimeInStatus_(taskIds) {
-  // ClickUp bulk endpoint: GET /task/bulk_time_in_status/task_ids?task_ids=a&task_ids=b
-  // Returns { taskId: { current_status, status_history }, ... }
-  var qs = taskIds.map(function(id) { return 'task_ids=' + id; }).join('&');
-  try {
-    return clickupGet_('/task/bulk_time_in_status/task_ids?' + qs);
-  } catch (e) {
-    Logger.log('Bulk time_in_status error: ' + e.message);
-    return {};
-  }
-}
+// ─── Cumulativo Calculation ──────────────────────────────────────────────────
 
-function calculateTurbinho_(editors, editorTaskIds) {
-  const turbinhoData = {};
-  const allTaskIds = {};
-
-  // Collect unique task IDs
-  Object.values(editorTaskIds).forEach(ids => {
-    ids.forEach(id => { allTaskIds[id] = true; });
-  });
-
-  const uniqueIds = Object.keys(allTaskIds);
-  Logger.log('Turbinho: Checking status history for ' + uniqueIds.length + ' tasks...');
-
-  // Safety: skip Turbinho if too many tasks (GAS 6-min timeout risk)
-  if (uniqueIds.length > 500) {
-    Logger.log('Turbinho: SKIPPED — too many tasks (' + uniqueIds.length + '). Limit is 500.');
-    return turbinhoData;
-  }
-
-  // Use bulk endpoint in batches of 100 (ClickUp limit)
-  const taskAjusteMap = {};
-  const taskAprovadoMap = {};
-  const taskAprovadoDate = {};
-  for (var i = 0; i < uniqueIds.length; i += 100) {
-    var batch = uniqueIds.slice(i, i + 100);
-    Logger.log('Turbinho bulk check: ' + (i + batch.length) + '/' + uniqueIds.length);
-    var bulkResult = getBulkTimeInStatus_(batch);
-
-    batch.forEach(function(taskId) {
-      var data = bulkResult[taskId];
-      if (!data || !data.status_history) {
-        taskAjusteMap[taskId] = false;
-        taskAprovadoMap[taskId] = false;
-        taskAprovadoDate[taskId] = null;
-        return;
-      }
-      taskAjusteMap[taskId] = data.status_history.some(function(s) {
-        return CONFIG.BONUS.ajusteStatuses.indexOf((s.status || '').toLowerCase()) !== -1;
-      });
-      var aprovadoEntry = data.status_history.find(function(s) {
-        return (s.status || '').toLowerCase() === 'aprovado';
-      });
-      taskAprovadoMap[taskId] = !!aprovadoEntry;
-      // Extract approval date from time_in_status "since" timestamp
-      if (aprovadoEntry && aprovadoEntry.total_time && aprovadoEntry.total_time.since) {
-        var d = new Date(parseInt(aprovadoEntry.total_time.since));
-        taskAprovadoDate[taskId] = isNaN(d.getTime()) ? null : Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      } else {
-        taskAprovadoDate[taskId] = null;
-      }
-    });
-  }
-
-  // Calculate per editor (only time fixo)
-  // Turbinho = passed through "aprovado" AND never had "para ajustar"/"para ajustar cliente"
+function calculateCumulativo_(editors) {
+  const cumulData = {};
   editors.forEach(editor => {
     if (!isTimeFixo_(editor.name)) return;
-    const taskIds = editorTaskIds[editor.id] || [];
-    const aprovados = taskIds.filter(id => taskAprovadoMap[id]);
-    const semAjuste = aprovados.filter(id => !taskAjusteMap[id]).length;
-    const comAjuste = aprovados.filter(id => taskAjusteMap[id]).length;
-    const pendentes = taskIds.filter(id => !taskAprovadoMap[id]).length;
-
-    if (semAjuste > 0) {
-      turbinhoData[editor.id] = {
+    const tier = CONFIG.BONUS.cumulativo.find(t => editor.pontos >= t.min);
+    if (tier) {
+      cumulData[editor.id] = {
         name: editor.name,
-        total_tasks: taskIds.length,
-        aprovados: aprovados.length,
-        sem_ajuste: semAjuste,
-        com_ajuste: comAjuste,
-        pendentes: pendentes,
-        bonus: semAjuste * CONFIG.BONUS.turbinho.value,
+        pontos: editor.pontos,
+        threshold: tier.min,
+        bonus: tier.value,
       };
     }
   });
-
-  return { turbinhoData: turbinhoData, taskAprovadoDate: taskAprovadoDate };
+  return cumulData;
 }
 
-function generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, month, totalTasks) {
+function generateReport_(counts, turboDays, cumulData, month, totalTasks) {
   const { editors, unmatched, editorFds, editorTaskWeights, editorTaskNames } = counts;
 
   // Rank: only time fixo editors compete for ranking/bonus
@@ -547,8 +463,8 @@ function generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, mont
     const prodBonus = bonusEntry ? bonusEntry.value : 0;
     const turboData = turboDays[e.id];
     const turboBonus = turboData ? turboData.total_bonus : 0;
-    const turbinho = turbinhoData[e.id];
-    const turbinhoBonus = turbinho ? turbinho.bonus : 0;
+    const cumul = cumulData[e.id];
+    const cumulBonus = cumul ? cumul.bonus : 0;
     const fdsData = editorFds[e.id];
     const fdsBonus = fdsData ? Math.round(fdsData.bonus * 100) / 100 : 0;
     const fdsCount = fdsData ? fdsData.tasks.length : 0;
@@ -557,17 +473,15 @@ function generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, mont
       turbo: turboBonus,
       turbo_days: turboData ? turboData.count : 0,
       turbo_tasks: turboData ? turboData.tasks : [],
-      turbinho: turbinhoBonus,
-      turbinho_count: turbinho ? turbinho.sem_ajuste : 0,
+      cumulativo: cumulBonus,
       fds: fdsBonus,
       fds_count: fdsCount,
-      total: prodBonus + turboBonus + turbinhoBonus + fdsBonus,
+      total: prodBonus + turboBonus + cumulBonus + fdsBonus,
     };
     e.tasks = (editorTaskNames[e.id] || []).map(t => ({
       name: t.name, pts: t.pontos, task_id: t.task_id,
       primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
       is_turbo: t.is_turbo || false,
-      aprovado_date: taskAprovadoDate[t.task_id] || null,
     }));
   });
 
@@ -580,11 +494,10 @@ function generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, mont
         name: t.name, pts: t.pontos, task_id: t.task_id,
         primeira_edicao: t.primeira_edicao, status: t.status, status_color: t.status_color,
         is_turbo: t.is_turbo || false,
-        aprovado_date: taskAprovadoDate[t.task_id] || null,
       }));
       e.bonus = { freelaTotal: Math.round(freelaTotal * 100) / 100, tasks: tasks };
     } else {
-      e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, turbinho: 0, turbinho_count: 0, fds: 0, total: 0 };
+      e.bonus = { productivity: 0, turbo: 0, turbo_days: 0, cumulativo: 0, fds: 0, total: 0 };
     }
   });
 
@@ -605,7 +518,7 @@ function generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, mont
       tasks: e.tasks || (e.bonus && e.bonus.tasks) || [],
     })),
     turbo_days: turboDays,
-    turbinho_summary: turbinhoData,
+    cumulativo_summary: cumulData,
     summary: {
       total_pontos: Math.round(allEditors.reduce((a, e) => a + e.pontos, 0) * 10) / 10,
       total_editors: allEditors.length,
@@ -666,10 +579,8 @@ function videoCounterMain(customMonth) {
   });
 
   const turboDays = calculateTurbo_(counts.editors, counts.editorTurboTasks);
-  const turbinhoResult = calculateTurbinho_(counts.editors, counts.editorTaskIds);
-  const turbinhoData = turbinhoResult.turbinhoData;
-  const taskAprovadoDate = turbinhoResult.taskAprovadoDate;
-  const report = generateReport_(counts, turboDays, turbinhoData, taskAprovadoDate, month, allTasks.length);
+  const cumulData = calculateCumulativo_(counts.editors);
+  const report = generateReport_(counts, turboDays, cumulData, month, allTasks.length);
 
   // Cache result in Script Properties (persists between runs)
   const cache = PropertiesService.getScriptProperties();
