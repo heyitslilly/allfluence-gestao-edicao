@@ -111,11 +111,19 @@ function clickupGet_(endpoint) {
   return JSON.parse(response.getContentText());
 }
 
-function getTasks_(listId, page) {
-  // No date filter at API level — fetchAllTasks_ filters by "Primeira Edição" field.
-  // API date filters (date_updated/date_created) miss tasks created or updated
-  // outside the month window, causing incomplete data.
-  const url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
+function getTasks_(listId, page, dateRange) {
+  // Filtro de data na API APENAS no limite inferior (date_updated_gt), com margem
+  // generosa: exclui o backlog de tarefas antigas (muito mais rápido) SEM risco de
+  // perder tarefas do mês — uma tarefa com "Primeira Edição" no mês foi, por
+  // definição, atualizada a partir do início do mês (setar o campo atualiza a task).
+  // NUNCA usar date_updated_lt (limite superior): tarefas editadas em meses
+  // seguintes (mudança de status) seriam perdidas — foi o bug que motivou remover
+  // o filtro antigo. Sem dateRange (ex: diagnoseMonth) faz a varredura completa.
+  let url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
+  if (dateRange && dateRange.start) {
+    const buffer = 31 * 24 * 60 * 60 * 1000; // 31 dias de margem de segurança
+    url += '&date_updated_gt=' + (dateRange.start - buffer);
+  }
   const data = clickupGet_(url);
   return data.tasks || [];
 }
@@ -285,7 +293,7 @@ function fetchAllTasks_(listId, dateRange) {
   let hasMore = true;
 
   while (hasMore) {
-    const tasks = getTasks_(listId, page);
+    const tasks = getTasks_(listId, page, dateRange);
     Logger.log('  Page ' + page + ': ' + tasks.length + ' tasks');
     if (tasks.length === 0) { hasMore = false; break; }
 
@@ -908,4 +916,37 @@ function clearCache() {
     }
   });
   Logger.log('Cache limpo: ' + removed + ' chave(s) removida(s). CLICKUP_API_KEY preservada.');
+}
+
+/**
+ * Pré-aquece o cache dos últimos meses (mais antigo → mais novo), para o widget
+ * abrir sempre do cache (rápido) e nunca dar "Failed to fetch" por timeout.
+ *
+ * Rode no EDITOR (não tem o limite de tempo do navegador) ou — melhor ainda —
+ * aponte o acionador agendado para esta função em vez de videoCounterMain.
+ * Aquecer do mês mais antigo p/ o mais novo faz o desempate usar o cache do mês
+ * anterior em vez de buscar tudo de novo na API.
+ */
+function warmRecentMonths() {
+  const MONTHS_BACK = 2; // mês atual + 2 anteriores
+  const now = new Date();
+  const tz = Session.getScriptTimeZone();
+  const cache = PropertiesService.getScriptProperties();
+
+  const months = [];
+  for (let i = MONTHS_BACK; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(Utilities.formatDate(d, tz, 'yyyy-MM'));
+  }
+
+  months.forEach(function(m) {
+    Logger.log('Aquecendo ' + m + '...');
+    const report = videoCounterMain(m);
+    const key = CONFIG.CACHE_KEY + '_' + m;
+    cache.setProperty(key, JSON.stringify(report));
+    cache.setProperty(key + '_TS', new Date().toISOString());
+    Logger.log('  ' + m + ' OK — ' + report.summary.total_pontos + ' pts, ' +
+      report.summary.total_editors + ' editores');
+  });
+  Logger.log('warmRecentMonths: concluido (' + months.join(', ') + ')');
 }
