@@ -700,7 +700,19 @@ function videoCounterMain(customMonth) {
 
   const turboDays = calculateTurbo_(counts.editors, counts.editorTurboTasks);
   const cumulData = calculateCumulativo_(counts.editors);
-  const prevMonthData = getPrevMonthCounts_(month); // desempate do ranking
+
+  // Desempate do ranking: só vale a pena buscar o mês anterior (custo de API) se
+  // houver EMPATE DE PONTOS afetando o 1º ou 2º lugar. Sem empate no topo, pula.
+  const fixedPtsDesc = counts.editors
+    .filter(e => isTimeFixo_(e.name))
+    .map(e => e.pontos)
+    .sort((a, b) => b - a);
+  const needsTiebreak =
+    (fixedPtsDesc.length >= 2 && fixedPtsDesc[0] === fixedPtsDesc[1]) ||
+    (fixedPtsDesc.length >= 3 && fixedPtsDesc[1] === fixedPtsDesc[2]);
+  const prevMonthData = needsTiebreak ? getPrevMonthCounts_(month) : null;
+  if (needsTiebreak) Logger.log('Empate no topo detectado — buscando mes anterior para desempate.');
+
   const report = generateReport_(counts, turboDays, cumulData, prevMonthData, month, allTasks.length);
 
   // Cache result in Script Properties (persists between runs)
@@ -726,9 +738,10 @@ function doGet(e) {
   const forceRefresh = e && e.parameter && e.parameter.refresh === 'true';
   const cache = PropertiesService.getScriptProperties();
 
-  // Cache TTL: current month = 6h, past months = 24h
+  // Cache TTL: current month = 6h, past months = 7 dias (meses fechados quase
+  // não mudam; o botão "Atualizar" força recalcular quando precisar).
   const CURRENT_MONTH_TTL = 6 * 60 * 60 * 1000;
-  const PAST_MONTH_TTL = 24 * 60 * 60 * 1000;
+  const PAST_MONTH_TTL = 7 * 24 * 60 * 60 * 1000;
   const now = new Date();
   const currentMonth = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
 
