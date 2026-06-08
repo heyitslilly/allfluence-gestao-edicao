@@ -467,10 +467,11 @@ function previousMonthStr_(month) {
 }
 
 /**
- * Conta quantos vídeos cada editor (por nome de exibição) editou no MÊS ANTERIOR.
- * Usado APENAS como critério de desempate do bônus de ranking (500/250).
+ * Soma quantos PONTOS cada editor (por nome de exibição) fez no MÊS ANTERIOR.
+ * Usado APENAS como critério de desempate do bônus de ranking (500/250):
+ * em empate de pontos no mês atual, vence quem fez mais PONTOS no mês anterior.
  * Prefere o relatório do mês anterior já em cache (sem custo de API); se não
- * existir, busca as tarefas na API. Retorna { prevMonth, counts: { "Nome": qtd } }.
+ * existir, busca as tarefas na API. Retorna { prevMonth, counts: { "Nome": pts } }.
  */
 function getPrevMonthCounts_(month) {
   const prevMonth = previousMonthStr_(month);
@@ -484,7 +485,7 @@ function getPrevMonthCounts_(month) {
       const data = JSON.parse(cached);
       (data.editors || []).forEach(function(ed) {
         if (ed && ed.name && ed.totals) {
-          counts[ed.name] = (counts[ed.name] || 0) + (ed.totals.raw_count || 0);
+          counts[ed.name] = (counts[ed.name] || 0) + (ed.totals.pontos || 0);
         }
       });
       return { prevMonth: prevMonth, counts: counts };
@@ -493,25 +494,27 @@ function getPrevMonthCounts_(month) {
     }
   }
 
-  // 2. Sem cache → buscar tarefas do mês anterior e contar vídeos por editor
+  // 2. Sem cache → buscar tarefas do mês anterior e somar pontos por editor
   const dateRange = getMonthRange_(prevMonth);
   const listIds = [CONFIG.LIST_IDS.producao, CONFIG.LIST_IDS.filaFixo, CONFIG.LIST_IDS.filaFreelas];
   listIds.forEach(function(listId) {
     try {
       fetchAllTasks_(listId, dateRange).forEach(function(task) {
+        const pontos = getPontos_(task);
+        if (pontos === null) return;
         const editors = extractEditors_(task);
         if (editors.length === 0) return;
         const split = editors.length;
         editors.forEach(function(ed) {
           var displayName = CONFIG.NAME_ALIASES[(ed.name || '').toLowerCase()] || ed.name;
-          counts[displayName] = (counts[displayName] || 0) + 1 / split;
+          counts[displayName] = (counts[displayName] || 0) + pontos / split;
         });
       });
     } catch (err) {
       Logger.log('getPrevMonthCounts_: erro na lista ' + listId + ': ' + err.message);
     }
   });
-  Object.keys(counts).forEach(function(k) { counts[k] = Math.round(counts[k]); });
+  Object.keys(counts).forEach(function(k) { counts[k] = Math.round(counts[k] * 10) / 10; });
   return { prevMonth: prevMonth, counts: counts };
 }
 
@@ -523,14 +526,14 @@ function generateReport_(counts, turboDays, cumulData, prevMonthData, month, tot
   const otherEditors = editors.filter(e => !isTimeFixo_(e.name));
 
   // Desempate do bônus de ranking (500/250): em EMPATE DE PONTOS, fica melhor
-  // colocado quem editou mais vídeos no MÊS ANTERIOR.
+  // colocado quem fez mais PONTOS no MÊS ANTERIOR.
   const prevCounts = (prevMonthData && prevMonthData.counts) || {};
   const prevMonthLabel = (prevMonthData && prevMonthData.prevMonth) || '';
-  function prevVideosOf(e) { return prevCounts[e.name] || 0; }
+  function prevPtsOf(e) { return prevCounts[e.name] || 0; }
 
   fixedEditors.sort(function(a, b) {
     if (b.pontos !== a.pontos) return b.pontos - a.pontos;
-    return prevVideosOf(b) - prevVideosOf(a); // empate → mais vídeos no mês anterior na frente
+    return prevPtsOf(b) - prevPtsOf(a); // empate → mais pontos no mês anterior na frente
   });
   fixedEditors.forEach((e, i) => { e.rank = i + 1; });
   otherEditors.sort((a, b) => b.pontos - a.pontos);
@@ -577,27 +580,27 @@ function generateReport_(counts, turboDays, cumulData, prevMonthData, month, tot
       if (grp.length < 2) return; // sem empate
       const minRank = Math.min.apply(null, grp.map(function(e) { return e.rank; }));
       if (minRank > 2) return; // empate fora do 1º/2º lugar → não muda bônus de ranking
-      // ordena pelo desempate: mais vídeos no mês anterior = melhor colocação
-      const ordered = grp.slice().sort(function(a, b) { return prevVideosOf(b) - prevVideosOf(a); });
+      // ordena pelo desempate: mais pontos no mês anterior = melhor colocação
+      const ordered = grp.slice().sort(function(a, b) { return prevPtsOf(b) - prevPtsOf(a); });
       const involved = ordered.map(function(e) {
         return {
           name: e.name,
-          prev_count: prevVideosOf(e),
+          prev_pontos: prevPtsOf(e),
           rank: e.rank,
           bonus: (e.bonus && e.bonus.productivity) || 0,
         };
       });
       const top = involved[0], second = involved[1];
       var note;
-      if (top.prev_count === second.prev_count) {
+      if (top.prev_pontos === second.prev_pontos) {
         note = 'Empate de pontos (' + grp[0].pontos + ' pts) entre '
           + involved.map(function(x) { return x.name.split(' ')[0]; }).join(', ')
           + '. No mes anterior (' + (prevMonthLabel || '—') + ') o empate tambem persiste ('
-          + top.prev_count + ' videos cada) — mantida a ordem atual.';
+          + top.prev_pontos + ' pts cada) — mantida a ordem atual.';
       } else {
-        note = 'Empate de pontos (' + grp[0].pontos + ' pts). Desempate pela edicao do mes anterior ('
+        note = 'Empate de pontos (' + grp[0].pontos + ' pts). Desempate pelos pontos do mes anterior ('
           + (prevMonthLabel || '—') + '): '
-          + involved.map(function(x) { return x.name.split(' ')[0] + ' = ' + x.prev_count + ' videos'; }).join(' · ')
+          + involved.map(function(x) { return x.name.split(' ')[0] + ' = ' + x.prev_pontos + ' pts'; }).join(' · ')
           + '. ' + top.name.split(' ')[0] + ' fica em ' + top.rank + 'º'
           + (top.bonus > 0 ? ' (R$' + top.bonus + ')' : ' (sem bonus)') + '.';
       }
