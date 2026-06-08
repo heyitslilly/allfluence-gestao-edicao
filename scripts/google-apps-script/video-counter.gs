@@ -171,11 +171,15 @@ function getPrimeiraEdicao_(task) {
 
 function getPontos_(task) {
   // 1. Try "Pontos" custom field
+  // O valor pode ser um número puro ("6") ou uma opção rotulada onde o
+  // primeiro número é a pontuação, ex: "1 = BBB 30min", "12 = Longa 12 a 16h".
+  // Pegamos apenas o PRIMEIRO número do texto (a pontuação), nunca os demais.
   const field = findField_(task, 'Pontos');
   if (field) {
     const val = parseFieldValue_(field);
     if (val !== null && val !== undefined) {
-      const num = parseInt(String(val).replace(/[^0-9]/g, ''));
+      const match = String(val).match(/\d+/);
+      const num = match ? parseInt(match[0], 10) : NaN;
       if (!isNaN(num) && num > 0) return num;
     }
   }
@@ -447,13 +451,79 @@ function calculateCumulativo_(editors) {
   return cumulData;
 }
 
-function generateReport_(counts, turboDays, cumulData, month, totalTasks) {
+function previousMonthStr_(month) {
+  const parts = month.split('-').map(Number);
+  let y = parts[0], m = parts[1] - 1;
+  if (m < 1) { m = 12; y -= 1; }
+  return y + '-' + String(m).padStart(2, '0');
+}
+
+/**
+ * Conta quantos vídeos cada editor (por nome de exibição) editou no MÊS ANTERIOR.
+ * Usado APENAS como critério de desempate do bônus de ranking (500/250).
+ * Prefere o relatório do mês anterior já em cache (sem custo de API); se não
+ * existir, busca as tarefas na API. Retorna { prevMonth, counts: { "Nome": qtd } }.
+ */
+function getPrevMonthCounts_(month) {
+  const prevMonth = previousMonthStr_(month);
+  const cache = PropertiesService.getScriptProperties();
+  const counts = {};
+
+  // 1. Preferir relatório do mês anterior já em cache (sem chamada de API)
+  const cached = cache.getProperty(CONFIG.CACHE_KEY + '_' + prevMonth);
+  if (cached) {
+    try {
+      const data = JSON.parse(cached);
+      (data.editors || []).forEach(function(ed) {
+        if (ed && ed.name && ed.totals) {
+          counts[ed.name] = (counts[ed.name] || 0) + (ed.totals.raw_count || 0);
+        }
+      });
+      return { prevMonth: prevMonth, counts: counts };
+    } catch (err) {
+      Logger.log('getPrevMonthCounts_: cache invalido, buscando na API. ' + err.message);
+    }
+  }
+
+  // 2. Sem cache → buscar tarefas do mês anterior e contar vídeos por editor
+  const dateRange = getMonthRange_(prevMonth);
+  const listIds = [CONFIG.LIST_IDS.producao, CONFIG.LIST_IDS.filaFixo, CONFIG.LIST_IDS.filaFreelas];
+  listIds.forEach(function(listId) {
+    try {
+      fetchAllTasks_(listId, dateRange).forEach(function(task) {
+        const editors = extractEditors_(task);
+        if (editors.length === 0) return;
+        const split = editors.length;
+        editors.forEach(function(ed) {
+          var displayName = CONFIG.NAME_ALIASES[(ed.name || '').toLowerCase()] || ed.name;
+          counts[displayName] = (counts[displayName] || 0) + 1 / split;
+        });
+      });
+    } catch (err) {
+      Logger.log('getPrevMonthCounts_: erro na lista ' + listId + ': ' + err.message);
+    }
+  });
+  Object.keys(counts).forEach(function(k) { counts[k] = Math.round(counts[k]); });
+  return { prevMonth: prevMonth, counts: counts };
+}
+
+function generateReport_(counts, turboDays, cumulData, prevMonthData, month, totalTasks) {
   const { editors, unmatched, editorFds, editorTaskWeights, editorTaskNames } = counts;
 
   // Rank: only time fixo editors compete for ranking/bonus
   const fixedEditors = editors.filter(e => isTimeFixo_(e.name));
   const otherEditors = editors.filter(e => !isTimeFixo_(e.name));
-  fixedEditors.sort((a, b) => b.pontos - a.pontos);
+
+  // Desempate do bônus de ranking (500/250): em EMPATE DE PONTOS, fica melhor
+  // colocado quem editou mais vídeos no MÊS ANTERIOR.
+  const prevCounts = (prevMonthData && prevMonthData.counts) || {};
+  const prevMonthLabel = (prevMonthData && prevMonthData.prevMonth) || '';
+  function prevVideosOf(e) { return prevCounts[e.name] || 0; }
+
+  fixedEditors.sort(function(a, b) {
+    if (b.pontos !== a.pontos) return b.pontos - a.pontos;
+    return prevVideosOf(b) - prevVideosOf(a); // empate → mais vídeos no mês anterior na frente
+  });
   fixedEditors.forEach((e, i) => { e.rank = i + 1; });
   otherEditors.sort((a, b) => b.pontos - a.pontos);
 
@@ -484,6 +554,56 @@ function generateReport_(counts, turboDays, cumulData, month, totalTasks) {
       is_turbo: t.is_turbo || false,
     }));
   });
+
+  // ── Explicação do desempate do bônus de ranking (500/250) ──
+  // Só anexa quando o empate de PONTOS envolve uma posição de bônus (1º ou 2º).
+  // O resultado fica em e.bonus.rank_tiebreak.note para o widget mostrar no hover.
+  if (fixedEditors.length >= 2) {
+    const byPts = {};
+    fixedEditors.forEach(function(e) {
+      const k = String(e.pontos);
+      (byPts[k] = byPts[k] || []).push(e);
+    });
+    Object.keys(byPts).forEach(function(k) {
+      const grp = byPts[k];
+      if (grp.length < 2) return; // sem empate
+      const minRank = Math.min.apply(null, grp.map(function(e) { return e.rank; }));
+      if (minRank > 2) return; // empate fora do 1º/2º lugar → não muda bônus de ranking
+      // ordena pelo desempate: mais vídeos no mês anterior = melhor colocação
+      const ordered = grp.slice().sort(function(a, b) { return prevVideosOf(b) - prevVideosOf(a); });
+      const involved = ordered.map(function(e) {
+        return {
+          name: e.name,
+          prev_count: prevVideosOf(e),
+          rank: e.rank,
+          bonus: (e.bonus && e.bonus.productivity) || 0,
+        };
+      });
+      const top = involved[0], second = involved[1];
+      var note;
+      if (top.prev_count === second.prev_count) {
+        note = 'Empate de pontos (' + grp[0].pontos + ' pts) entre '
+          + involved.map(function(x) { return x.name.split(' ')[0]; }).join(', ')
+          + '. No mes anterior (' + (prevMonthLabel || '—') + ') o empate tambem persiste ('
+          + top.prev_count + ' videos cada) — mantida a ordem atual.';
+      } else {
+        note = 'Empate de pontos (' + grp[0].pontos + ' pts). Desempate pela edicao do mes anterior ('
+          + (prevMonthLabel || '—') + '): '
+          + involved.map(function(x) { return x.name.split(' ')[0] + ' = ' + x.prev_count + ' videos'; }).join(' · ')
+          + '. ' + top.name.split(' ')[0] + ' fica em ' + top.rank + 'º'
+          + (top.bonus > 0 ? ' (R$' + top.bonus + ')' : ' (sem bonus)') + '.';
+      }
+      grp.forEach(function(e) {
+        if (!e.bonus) e.bonus = {};
+        e.bonus.rank_tiebreak = {
+          prev_month: prevMonthLabel,
+          pontos: grp[0].pontos,
+          involved: involved,
+          note: note,
+        };
+      });
+    });
+  }
 
   // Assign bonus — other editors (freelas get per-task by weight, rest get nothing)
   otherEditors.forEach(e => {
@@ -580,7 +700,8 @@ function videoCounterMain(customMonth) {
 
   const turboDays = calculateTurbo_(counts.editors, counts.editorTurboTasks);
   const cumulData = calculateCumulativo_(counts.editors);
-  const report = generateReport_(counts, turboDays, cumulData, month, allTasks.length);
+  const prevMonthData = getPrevMonthCounts_(month); // desempate do ranking
+  const report = generateReport_(counts, turboDays, cumulData, prevMonthData, month, allTasks.length);
 
   // Cache result in Script Properties (persists between runs)
   const cache = PropertiesService.getScriptProperties();
@@ -754,4 +875,24 @@ function diagnoseMonth() {
   Object.keys(fieldNames).sort().forEach(name => {
     Logger.log('  "' + name + '" — aparece em ' + fieldNames[name] + ' tasks');
   });
+}
+
+/**
+ * Limpa TODO o cache de resultados (mês atual + todos os meses já abertos),
+ * SEM apagar a CLICKUP_API_KEY. Rode esta função uma vez no editor depois de
+ * colar uma versão nova do código — assim todo mês recalcula do zero na
+ * próxima vez que for aberto no widget.
+ * (No editor: selecione "clearCache" na barra de funções e clique Executar.)
+ */
+function clearCache() {
+  const cache = PropertiesService.getScriptProperties();
+  const all = cache.getProperties();
+  let removed = 0;
+  Object.keys(all).forEach(function(k) {
+    if (k.indexOf(CONFIG.CACHE_KEY) === 0) {
+      cache.deleteProperty(k);
+      removed++;
+    }
+  });
+  Logger.log('Cache limpo: ' + removed + ' chave(s) removida(s). CLICKUP_API_KEY preservada.');
 }

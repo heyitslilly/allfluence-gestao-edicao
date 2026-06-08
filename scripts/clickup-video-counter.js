@@ -132,7 +132,11 @@ function getPontos(task) {
   if (pontosField) {
     const val = parseFieldValue(pontosField);
     if (val !== null && val !== undefined) {
-      const num = parseInt(String(val).replace(/[^0-9]/g, ''));
+      // O valor pode ser um número puro ("6") ou uma opção rotulada onde o
+      // primeiro número é a pontuação, ex: "1 = BBB 30min", "12 = Longa 12 a 16h".
+      // Pegamos apenas o PRIMEIRO número do texto (a pontuação), nunca os demais.
+      const match = String(val).match(/\d+/);
+      const num = match ? parseInt(match[0], 10) : NaN;
       if (!isNaN(num) && num > 0) return num;
     }
   }

@@ -243,8 +243,15 @@ function render(data) {
     html += '<td>' + medal + (e.name.split(' ')[0]) + '</td>';
     const rankVal = e.bonus?.productivity || 0;
     const rankHtml = rankVal > 0 ? '<span style="color:#fbbf24;font-weight:700">R$' + rankVal + '</span>' : '<span style="color:#334155">\u2014</span>';
+    // Desempate de ranking: mostra \u24d8 com explica\u00e7\u00e3o no hover (campo vindo do Apps Script)
+    const tb = e.bonus?.rank_tiebreak;
+    let rankCell = rankHtml;
+    if (tb && tb.note) {
+      const safeNote = String(tb.note).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      rankCell = '<span title="' + safeNote + '" style="border-bottom:1px dotted #94a3b8;cursor:help">' + rankHtml + ' <span style="font-size:10px;color:#94a3b8">&#9432;</span></span>';
+    }
     html += '<td style="font-weight:800;color:#10b981">' + e.totals.pontos + '</td>';
-    html += '<td>' + rankHtml + '</td>';
+    html += '<td>' + rankCell + '</td>';
     html += '<td>' + turboHtml + '</td>';
     html += '<td>' + cumulHtml + '</td>';
     html += '<td>' + fdsHtml + '</td>';
