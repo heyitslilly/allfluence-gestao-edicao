@@ -119,7 +119,10 @@ function getTasks_(listId, page, dateRange) {
   // NUNCA usar date_updated_lt (limite superior): tarefas editadas em meses
   // seguintes (mudança de status) seriam perdidas — foi o bug que motivou remover
   // o filtro antigo. Sem dateRange (ex: diagnoseMonth) faz a varredura completa.
-  let url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true`;
+  // subtasks=true: inclui SUBTAREFAS na resposta (por padrão a API só traz tarefas
+  // de topo). Cada subtarefa vem como uma task com seus próprios campos/tags, então
+  // é avaliada normalmente por "Primeira Edição", "Editor", "Pontos" e tags (fds).
+  let url = `/list/${listId}/task?page=${page}&archived=false&include_closed=true&subtasks=true`;
   if (dateRange && dateRange.start) {
     const buffer = 31 * 24 * 60 * 60 * 1000; // 31 dias de margem de segurança
     url += '&date_updated_gt=' + (dateRange.start - buffer);
