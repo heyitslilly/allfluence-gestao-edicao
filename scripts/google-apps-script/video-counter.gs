@@ -670,7 +670,12 @@ function generateReport_(counts, turboDays, cumulData, prevMonthData, month, tot
  */
 function videoCounterMain(customMonth) {
   const now = new Date();
-  const month = customMonth || Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
+  // Quando chamado por um ACIONADOR, o GAS passa um objeto de evento como 1º
+  // argumento. Por isso só usamos customMonth se for realmente um texto "yyyy-MM";
+  // caso contrário (acionador, ou sem argumento) usa o mês atual.
+  const month = (typeof customMonth === 'string' && customMonth)
+    ? customMonth
+    : Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
 
   Logger.log('VideoCounter: Starting for month ' + month);
 
