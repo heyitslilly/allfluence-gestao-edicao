@@ -757,9 +757,11 @@ function doGet(e) {
   const forceRefresh = e && e.parameter && e.parameter.refresh === 'true';
   const cache = PropertiesService.getScriptProperties();
 
-  // Cache TTL: current month = 6h, past months = 7 dias (meses fechados quase
-  // não mudam; o botão "Atualizar" força recalcular quando precisar).
-  const CURRENT_MONTH_TTL = 6 * 60 * 60 * 1000;
+  // Cache TTL alinhado à atualização diária: mês atual = 26h (não recalcula
+  // sozinho dentro do dia — quem atualiza é o acionador diário warmRecentMonths;
+  // a folga de 2h cobre variação de horário do acionador). Meses passados = 7 dias.
+  // O botão "Atualizar" (widget de gestão) força recalcular quando precisar.
+  const CURRENT_MONTH_TTL = 26 * 60 * 60 * 1000;
   const PAST_MONTH_TTL = 7 * 24 * 60 * 60 * 1000;
   const now = new Date();
   const currentMonth = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy-MM');
